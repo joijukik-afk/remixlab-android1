@@ -2,6 +2,7 @@ package com.joijukik.remixlab
 
 import android.app.Application
 import android.media.audiofx.PresetReverb
+import android.media.projection.MediaProjection
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.media3.common.MediaItem
@@ -10,12 +11,14 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import java.io.File
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
     val player: ExoPlayer = ExoPlayer.Builder(application).build()
 
     private var effectsManager: AudioEffectsManager? = null
+    private val audioExporter = AudioExporter(application)
 
     // --- State ها ---
 
@@ -43,6 +46,19 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
     val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
+    // --- State های ضبط ---
+    private val _isRecording = MutableStateFlow(false)
+    val isRecording: StateFlow<Boolean> = _isRecording
+
+    private val _recordingSeconds = MutableStateFlow(0L)
+    val recordingSeconds: StateFlow<Long> = _recordingSeconds
+
+    private val _lastSavedFile = MutableStateFlow<File?>(null)
+    val lastSavedFile: StateFlow<File?> = _lastSavedFile
+
+    private val _recordingError = MutableStateFlow<String?>(null)
+    val recordingError: StateFlow<String?> = _recordingError
+
     init {
         player.addListener(object : Player.Listener {
             override fun onIsPlayingChanged(isPlaying: Boolean) {
@@ -53,6 +69,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
                 setupEffects(audioSessionId)
             }
         })
+
+        // کالبک‌های ضبط
+        audioExporter.onProgress = { bytes ->
+            // تخمین ثانیه از روی بایت
+            _recordingSeconds.value = bytes / (44100L * 4L)
+        }
+        audioExporter.onFinish = { file ->
+            _lastSavedFile.value = file
+            _isRecording.value = false
+        }
+        audioExporter.onError = { msg ->
+            _recordingError.value = msg
+            _isRecording.value = false
+        }
     }
 
     private fun setupEffects(audioSessionId: Int) {
@@ -63,7 +93,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             e.printStackTrace()
             null
         }
-        // اعمال مجدد افکت‌های فعال
         effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
@@ -142,17 +171,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     // --- اعمال پریست COMA ---
 
     fun applyComaPreset(preset: ComaPreset) {
-        // سرعت
         _currentSpeed.value = preset.speed
         _isSlowed.value = preset.speed < 1.0f
-
-        // گام
         _currentPitch.value = preset.pitch
-
-        // اعمال هر دو با هم
         applyPlaybackParameters()
 
-        // Reverb
         if (preset.reverbPreset != null) {
             _isReverbEnabled.value = true
             _currentReverbPreset.value = preset.reverbPreset
@@ -162,11 +185,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             effectsManager?.setReverbEnabled(false)
         }
 
-        // Bass Boost
         _isBassBoostEnabled.value = preset.bassBoost
         effectsManager?.setBassBoostEnabled(preset.bassBoost)
 
-        // Virtualizer
         _is8DEnabled.value = preset.virtualizer
         effectsManager?.setVirtualizerEnabled(preset.virtualizer)
     }
@@ -181,10 +202,42 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // --- ضبط (Recording) ---
+
+    fun startRecording(mediaProjection: MediaProjection) {
+        // پاکسازی خطاهای قبلی
+        _recordingError.value = null
+        _lastSavedFile.value = null
+        _recordingSeconds.value = 0L
+
+        val started = audioExporter.startRecording(mediaProjection)
+        if (started) {
+            _isRecording.value = true
+            // اگه آهنگ پخش نمی‌شه، پخش رو شروع کن
+            if (!player.isPlaying) {
+                player.play()
+            }
+        } else {
+            _isRecording.value = false
+        }
+    }
+
+    fun stopRecording() {
+        audioExporter.stopRecording()
+        _isRecording.value = false
+    }
+
+    fun clearRecordingError() {
+        _recordingError.value = null
+    }
+
     // --- آزادسازی ---
 
     override fun onCleared() {
         super.onCleared()
+        if (_isRecording.value) {
+            audioExporter.stopRecording()
+        }
         effectsManager?.release()
         player.release()
     }
