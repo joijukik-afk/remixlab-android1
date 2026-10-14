@@ -1,15 +1,11 @@
 package com.joijukik.remixlab
 
 import android.app.Application
-import android.content.Context
-import android.media.AudioAttributes
-import android.media.AudioFocusRequest
-import android.media.AudioManager
 import android.media.audiofx.PresetReverb
 import android.media.projection.MediaProjection
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
-import androidx.media3.common.AudioAttributes as Media3AudioAttributes
+import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
@@ -22,29 +18,7 @@ import java.io.File
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    // --- Audio Focus ---
-    private val audioManager =
-        application.getSystemService(Context.AUDIO_SERVICE) as AudioManager
-    private var audioFocusRequest: AudioFocusRequest? = null
-
-    private val focusChangeListener = AudioManager.OnAudioFocusChangeListener { focusChange ->
-        when (focusChange) {
-            AudioManager.AUDIOFOCUS_LOSS -> {
-                player.pause()
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT -> {
-                player.pause()
-            }
-            AudioManager.AUDIOFOCUS_LOSS_TRANSIENT_CAN_DUCK -> {
-                player.volume = 0.3f
-            }
-            AudioManager.AUDIOFOCUS_GAIN -> {
-                player.volume = 1.0f
-            }
-        }
-    }
-
-    // --- Load Control برای بافر بزرگ‌تر و رفع پرش صدا ---
+    // Load Control برای بافر بزرگ‌تر
     private val loadControl = DefaultLoadControl.Builder()
         .setBufferDurationsMs(
             50000,  // minBufferMs
@@ -54,15 +28,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         )
         .build()
 
-    // --- Player ---
+    // Player - AudioFocus خودکار توسط ExoPlayer مدیریت می‌شه
     val player: ExoPlayer = ExoPlayer.Builder(application)
         .setLoadControl(loadControl)
         .setAudioAttributes(
-            Media3AudioAttributes.Builder()
+            AudioAttributes.Builder()
                 .setUsage(C.USAGE_MEDIA)
                 .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
                 .build(),
-            true // handleAudioFocus
+            true // handleAudioFocus = true → خود ExoPlayer مدیریت می‌کنه
         )
         .setHandleAudioBecomingNoisy(true)
         .build()
@@ -118,6 +92,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             override fun onAudioSessionIdChanged(audioSessionId: Int) {
                 setupEffects(audioSessionId)
             }
+
+            override fun onPlaybackStateChanged(playbackState: Int) {
+                if (playbackState == Player.STATE_READY) {
+                    // وقتی آماده شد، افکت‌ها رو دوباره اعمال کن
+                    setupEffects(player.audioSessionId)
+                }
+            }
         })
 
         // کالبک‌های ضبط
@@ -135,7 +116,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     }
 
     private fun setupEffects(audioSessionId: Int) {
-        // اگه session ID معتبر نیست، کاری نکن
         if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) {
             return
         }
@@ -148,34 +128,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             null
         }
 
-        // اعمال مجدد افکت‌های فعال
         effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
-    }
-
-    // --- Audio Focus ---
-
-    private fun requestAudioFocus(): Boolean {
-        val attributes = AudioAttributes.Builder()
-            .setUsage(AudioAttributes.USAGE_MEDIA)
-            .setContentType(AudioAttributes.CONTENT_TYPE_MUSIC)
-            .build()
-
-        audioFocusRequest = AudioFocusRequest.Builder(AudioManager.AUDIOFOCUS_GAIN)
-            .setAudioAttributes(attributes)
-            .setOnAudioFocusChangeListener(focusChangeListener)
-            .build()
-
-        return audioManager.requestAudioFocus(audioFocusRequest!!) ==
-                AudioManager.AUDIOFOCUS_REQUEST_GRANTED
-    }
-
-    private fun abandonAudioFocus() {
-        audioFocusRequest?.let {
-            audioManager.abandonAudioFocusRequest(it)
-        }
-        audioFocusRequest = null
     }
 
     // --- بارگذاری آهنگ ---
@@ -183,9 +138,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
-        if (requestAudioFocus()) {
-            player.play()
-        }
+        player.play()
     }
 
     // --- Slowed ---
@@ -279,11 +232,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun playPause() {
         if (player.isPlaying) {
             player.pause()
-            abandonAudioFocus()
         } else {
-            if (requestAudioFocus()) {
-                player.play()
-            }
+            player.play()
         }
     }
 
@@ -298,9 +248,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (started) {
             _isRecording.value = true
             if (!player.isPlaying) {
-                if (requestAudioFocus()) {
-                    player.play()
-                }
+                player.play()
             }
         } else {
             _isRecording.value = false
@@ -323,7 +271,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (_isRecording.value) {
             audioExporter.stopRecording()
         }
-        abandonAudioFocus()
         effectsManager?.release()
         player.release()
     }
