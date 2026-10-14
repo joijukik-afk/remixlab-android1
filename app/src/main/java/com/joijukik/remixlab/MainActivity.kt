@@ -1,7 +1,9 @@
 package com.joijukik.remixlab
 
+import android.Manifest
 import android.content.Context
 import android.content.Intent
+import android.content.pm.PackageManager
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
@@ -38,6 +40,7 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
 
 class MainActivity : ComponentActivity() {
@@ -75,12 +78,21 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
+    // ─── درخواست مجوز READ_MEDIA_AUDIO (اندروید ۱۳+) ───
+    val audioPermissionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.RequestPermission()
+    ) { isGranted ->
+        // مجوز داده یا رد شد - کاربر دوباره دکمه رو بزنه
+    }
+
+    // ─── انتخاب آهنگ ───
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
     }
 
+    // ─── درخواست MediaProjection ───
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
@@ -110,9 +122,26 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── دکمه انتخاب آهنگ ───
+        // ─── دکمه انتخاب آهنگ (با درخواست مجوز) ───
         Button(
-            onClick = { audioPicker.launch("audio/*") },
+            onClick = {
+                // بررسی مجوز قبل از باز کردن پنجره انتخاب
+                val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    Manifest.permission.READ_MEDIA_AUDIO
+                } else {
+                    Manifest.permission.READ_EXTERNAL_STORAGE
+                }
+
+                val hasPermission = ContextCompat.checkSelfPermission(
+                    context, permission
+                ) == PackageManager.PERMISSION_GRANTED
+
+                if (hasPermission) {
+                    audioPicker.launch("audio/*")
+                } else {
+                    audioPermissionLauncher.launch(permission)
+                }
+            },
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("🎵 انتخاب آهنگ")
@@ -212,7 +241,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         )
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ردیف اول
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -233,7 +261,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ردیف دوم
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -254,7 +281,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
-        // ردیف سوم: Dynamics (کیفیت استودیویی)
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
