@@ -1,5 +1,6 @@
 package com.joijukik.remixlab
 
+import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Slider
@@ -26,7 +28,6 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
-import android.net.Uri
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -44,6 +45,7 @@ class MainActivity : ComponentActivity() {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val isSlowed by viewModel.isSlowed.collectAsState()
@@ -78,7 +80,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(48.dp))
 
-        // دکمه انتخاب آهنگ
         Button(
             onClick = { audioPicker.launch("audio/*") },
             modifier = Modifier.fillMaxWidth()
@@ -88,7 +89,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // نمایش سرعت فعلی
         Text(
             text = "سرعت: ${"%.2f".format(currentSpeed)}x",
             style = MaterialTheme.typography.titleMedium
@@ -96,7 +96,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
-        // اسلایدر تغییر سرعت
         Slider(
             value = currentSpeed,
             onValueChange = { viewModel.setCustomSpeed(it) },
@@ -107,7 +106,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // دکمه‌های افکت
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -128,7 +126,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // دکمه پخش/توقف
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
