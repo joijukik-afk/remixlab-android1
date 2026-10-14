@@ -1,7 +1,6 @@
 package com.joijukik.remixlab
 
 import android.app.Application
-import android.media.audiofx.PresetReverb
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.media3.common.MediaItem
@@ -15,13 +14,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     val player: ExoPlayer = ExoPlayer.Builder(application).build()
 
-    private var reverb: PresetReverb? = null
+    private var effectsManager: AudioEffectsManager? = null
+
+    // --- State ها برای UI ---
 
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
     private val _isReverbEnabled = MutableStateFlow(false)
     val isReverbEnabled: StateFlow<Boolean> = _isReverbEnabled
+
+    private val _isBassBoostEnabled = MutableStateFlow(false)
+    val isBassBoostEnabled: StateFlow<Boolean> = _isBassBoostEnabled
+
+    private val _is8DEnabled = MutableStateFlow(false)
+    val is8DEnabled: StateFlow<Boolean> = _is8DEnabled
 
     private val _currentSpeed = MutableStateFlow(1.0f)
     val currentSpeed: StateFlow<Float> = _currentSpeed
@@ -34,15 +41,36 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
             }
+
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                setupEffects(audioSessionId)
+            }
         })
     }
+
+    private fun setupEffects(audioSessionId: Int) {
+        effectsManager?.release()
+        effectsManager = try {
+            AudioEffectsManager(audioSessionId)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+        // اگه افکت‌ها قبلاً روشن بودن، دوباره اعمال کن
+        effectsManager?.setReverbEnabled(_isReverbEnabled.value)
+        effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
+        effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
+    }
+
+    // --- بارگذاری و پخش آهنگ ---
 
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
-        setupReverbIfNeeded()
         player.play()
     }
+
+    // --- Slowed ---
 
     fun toggleSlowed() {
         _isSlowed.value = !_isSlowed.value
@@ -55,32 +83,36 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun toggleReverb() {
-        _isReverbEnabled.value = !_isReverbEnabled.value
-        setupReverbIfNeeded()
-        reverb?.enabled = _isReverbEnabled.value
-    }
-
-    private fun setupReverbIfNeeded() {
-        if (reverb == null) {
-            val sessionId = player.audioSessionId
-            if (sessionId != 0) {
-                try {
-                    reverb = PresetReverb(0, sessionId).apply {
-                        preset = PresetReverb.PRESET_LARGEHALL
-                    }
-                } catch (e: Exception) {
-                    e.printStackTrace()
-                }
-            }
-        }
-    }
+    // --- سرعت دلخواه (اسلایدر) ---
 
     fun setCustomSpeed(speed: Float) {
         _currentSpeed.value = speed
         player.playbackParameters = PlaybackParameters(speed)
         _isSlowed.value = speed < 1.0f
     }
+
+    // --- Reverb ---
+
+    fun toggleReverb() {
+        _isReverbEnabled.value = !_isReverbEnabled.value
+        effectsManager?.setReverbEnabled(_isReverbEnabled.value)
+    }
+
+    // --- Bass Boost ---
+
+    fun toggleBassBoost() {
+        _isBassBoostEnabled.value = !_isBassBoostEnabled.value
+        effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
+    }
+
+    // --- 8D Audio ---
+
+    fun toggle8D() {
+        _is8DEnabled.value = !_is8DEnabled.value
+        effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
+    }
+
+    // --- پخش/توقف ---
 
     fun playPause() {
         if (player.isPlaying) {
@@ -90,9 +122,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    // --- آزادسازی منابع ---
+
     override fun onCleared() {
         super.onCleared()
-        reverb?.release()
+        effectsManager?.release()
         player.release()
     }
 }
