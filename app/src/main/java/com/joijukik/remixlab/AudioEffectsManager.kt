@@ -13,37 +13,35 @@ class AudioEffectsManager(audioSessionId: Int) {
     private var reverb: PresetReverb? = null
 
     init {
-        // اگه session ID معتبر نیست، کاری نکن
-        if (audioSessionId == 0 || audioSessionId == -1) {
-            return
-        }
+        // اگه session ID معتبر نیست، افکت‌ها رو نمی‌سازیم
+        if (audioSessionId != 0 && audioSessionId != -1) {
+            equalizer = try {
+                Equalizer(0, audioSessionId).apply { enabled = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
 
-        equalizer = try {
-            Equalizer(0, audioSessionId).apply { enabled = false }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+            bassBoost = try {
+                BassBoost(0, audioSessionId).apply { enabled = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
 
-        bassBoost = try {
-            BassBoost(0, audioSessionId).apply { enabled = false }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
+            virtualizer = try {
+                Virtualizer(0, audioSessionId).apply { enabled = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
 
-        virtualizer = try {
-            Virtualizer(0, audioSessionId).apply { enabled = false }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-
-        reverb = try {
-            PresetReverb(0, audioSessionId).apply { enabled = false }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            reverb = try {
+                PresetReverb(0, audioSessionId).apply { enabled = false }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                null
+            }
         }
     }
 
