@@ -11,7 +11,7 @@ import kotlinx.coroutines.flow.StateFlow
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val audioProcessor = AudioProcessor()
+    private val audioProcessor = RemixAudioProcessor()
 
     val player: ExoPlayer = ExoPlayer.Builder(application)
         .setAudioProcessors(arrayOf(audioProcessor))
@@ -40,7 +40,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
-        // Audio Session ID رو بعد از prepare شدن ست می‌کنیم
         audioProcessor.setAudioSessionId(player.audioSessionId)
         player.play()
     }
