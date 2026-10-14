@@ -1,5 +1,6 @@
 package com.joijukik.remixlab
 
+import android.content.ContentValues
 import android.content.Context
 import android.media.AudioAttributes
 import android.media.AudioFormat
@@ -10,7 +11,13 @@ import android.media.MediaCodecInfo
 import android.media.MediaFormat
 import android.media.MediaMuxer
 import android.media.projection.MediaProjection
+import android.net.Uri
+import android.os.Build
+import android.os.Environment
+import android.provider.MediaStore
 import java.io.File
+import java.io.FileInputStream
+import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -22,12 +29,12 @@ class AudioExporter(private val context: Context) {
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
     private var outputFile: File? = null
+    private var outputUri: Uri? = null
 
     var onProgress: ((Long) -> Unit)? = null
-    var onFinish: ((File) -> Unit)? = null
+    var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // کیفیت بالاتر: 48kHz و 256 kbps
     private val sampleRate = 48000
     private val channelCount = 2
     private val bitRate = 256 * 1024
@@ -63,7 +70,7 @@ class AudioExporter(private val context: Context) {
             }
 
             audioRecord = record
-            outputFile = createOutputFile()
+            outputFile = createTempFile()
             record.startRecording()
             isRecording = true
 
@@ -80,7 +87,7 @@ class AudioExporter(private val context: Context) {
     }
 
     fun stopRecording() {
-        isRecording = false // فقط flag رو false کن - thread خودش تمیز می‌بنده
+        isRecording = false
     }
 
     private fun encodeAndWriteAudio(bufferSize: Int) {
@@ -129,7 +136,6 @@ class AudioExporter(private val context: Context) {
 
                 totalBytesRead += bytesRead
 
-                // ورودی به انکودر
                 val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
                 if (inputBufferIndex >= 0) {
                     val inputBuffer = codec.getInputBuffer(inputBufferIndex)
@@ -144,7 +150,6 @@ class AudioExporter(private val context: Context) {
                     }
                 }
 
-                // خروجی از انکودر
                 var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
                 while (outputBufferIndex >= 0) {
                     val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
@@ -171,7 +176,6 @@ class AudioExporter(private val context: Context) {
                 onProgress?.invoke(totalBytesRead)
             }
 
-            // Flush نهایی
             val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
             if (inputBufferIndex >= 0) {
                 codec.queueInputBuffer(
@@ -195,18 +199,17 @@ class AudioExporter(private val context: Context) {
                 outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
             }
 
-            // بستن تمیز
             try { codec.stop() } catch (_: Exception) {}
             try { codec.release() } catch (_: Exception) {}
             try { if (muxerStarted) muxer.stop() } catch (_: Exception) {}
             try { muxer.release() } catch (_: Exception) {}
 
-            // آزادسازی AudioRecord
             try { record.stop() } catch (_: Exception) {}
             try { record.release() } catch (_: Exception) {}
             audioRecord = null
 
-            onFinish?.invoke(file)
+            // حالا فایل رو از temp به MediaStore منتقل کن
+            saveToMediaStore(file)
 
         } catch (e: Exception) {
             e.printStackTrace()
@@ -225,12 +228,62 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    private fun createOutputFile(): File {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "RemixLab_$timestamp.m4a"
-        val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
-        val dir = File(baseDir, "Recordings")
+    /**
+     * ذخیره فایل temp توی MediaStore (پوشه Music/RemixLab)
+     */
+    private fun saveToMediaStore(tempFile: File) {
+        try {
+            val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+            val fileName = "RemixLab_$timestamp.m4a"
+
+            val contentValues = ContentValues().apply {
+                put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+                put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+                put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+                put(MediaStore.Audio.Media.IS_MUSIC, 1)
+
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    put(
+                        MediaStore.Audio.Media.RELATIVE_PATH,
+                        "${Environment.DIRECTORY_MUSIC}/RemixLab"
+                    )
+                }
+            }
+
+            val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+            } else {
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+            }
+
+            val uri = context.contentResolver.insert(collection, contentValues)
+            if (uri == null) {
+                onError?.invoke("خطا در ثبت فایل در MediaStore")
+                return
+            }
+
+            // کپی محتوای فایل temp به MediaStore
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                FileInputStream(tempFile).use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            // حذف فایل temp
+            tempFile.delete()
+
+            outputUri = uri
+            onFinish?.invoke(uri)
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onError?.invoke("خطا در ذخیره: ${e.message}")
+        }
+    }
+
+    private fun createTempFile(): File {
+        val dir = File(context.cacheDir, "recordings")
         if (!dir.exists()) dir.mkdirs()
-        return File(dir, fileName)
+        return File(dir, "temp_${System.currentTimeMillis()}.m4a")
     }
 }
