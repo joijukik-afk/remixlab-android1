@@ -19,7 +19,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     // --- LoadControl برای بافر بزرگ‌تر ---
     private val loadControl = DefaultLoadControl.Builder()
-        .setBufferDurationsMs(50000, 50000, 2500, 5000)
+        .setBufferDurationsMs(
+            50000,  // minBufferMs
+            50000,  // maxBufferMs
+            2500,   // bufferForPlaybackMs
+            5000    // bufferForPlaybackAfterRebufferMs
+        )
         .build()
 
     // --- Player ---
@@ -36,10 +41,11 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         .build()
 
     private var effectsManager: AudioEffectsManager? = null
+    private var dynamicsManager: DynamicsProcessorManager? = null
     private val audioExporter = AudioExporter(application)
     private val ambientManager = AmbientSoundManager()
 
-    // --- State ها ---
+    // ─── State های اصلی ───
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
@@ -51,6 +57,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val _is8DEnabled = MutableStateFlow(false)
     val is8DEnabled: StateFlow<Boolean> = _is8DEnabled
+
+    private val _isDynamicsEnabled = MutableStateFlow(false)
+    val isDynamicsEnabled: StateFlow<Boolean> = _isDynamicsEnabled
 
     private val _currentSpeed = MutableStateFlow(1.0f)
     val currentSpeed: StateFlow<Float> = _currentSpeed
@@ -64,7 +73,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
     val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
-    // --- State های ضبط ---
+    // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
@@ -77,7 +86,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
-    // --- State های افکت‌های محیطی ---
+    // ─── State های افکت محیطی ───
     private val _activeAmbient = MutableStateFlow<AmbientSoundManager.SoundType?>(null)
     val activeAmbient: StateFlow<AmbientSoundManager.SoundType?> = _activeAmbient
 
@@ -101,6 +110,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         })
 
+        // کالبک‌های ضبط
         audioExporter.onProgress = { bytes ->
             _recordingSeconds.value = bytes / (48000L * 4L)
         }
@@ -117,6 +127,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun setupEffects(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
 
+        // ─── Effects Manager (Reverb, BassBoost, Virtualizer, Equalizer) ───
         effectsManager?.release()
         effectsManager = try {
             AudioEffectsManager(audioSessionId)
@@ -128,25 +139,32 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
+
+        // ─── Dynamics Processor (Compressor, Limiter, EQ) ───
+        dynamicsManager?.release()
+        dynamicsManager = try {
+            DynamicsProcessorManager(audioSessionId)
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
+        }
+        dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
-    // --- بارگذاری آهنگ ---
-
+    // ─── بارگذاری آهنگ ───
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.play()
     }
 
-    // --- Slowed ---
-
+    // ─── Slowed ───
     fun toggleSlowed() {
         _isSlowed.value = !_isSlowed.value
         if (_isSlowed.value) setSpeedInternal(0.8f) else setSpeedInternal(1.0f)
     }
 
-    // --- سرعت ---
-
+    // ─── سرعت ───
     fun setCustomSpeed(speed: Float) {
         setSpeedInternal(speed)
     }
@@ -157,8 +175,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         applyPlaybackParameters()
     }
 
-    // --- گام (Pitch) ---
-
+    // ─── گام (Pitch) ───
     fun setPitch(pitch: Float) {
         _currentPitch.value = pitch
         applyPlaybackParameters()
@@ -168,8 +185,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         player.playbackParameters = PlaybackParameters(_currentSpeed.value, _currentPitch.value)
     }
 
-    // --- Reverb ---
-
+    // ─── Reverb ───
     fun toggleReverb() {
         _isReverbEnabled.value = !_isReverbEnabled.value
         effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
@@ -182,22 +198,25 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- Bass Boost ---
-
+    // ─── Bass Boost ───
     fun toggleBassBoost() {
         _isBassBoostEnabled.value = !_isBassBoostEnabled.value
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
     }
 
-    // --- 8D Audio ---
-
+    // ─── 8D Audio ───
     fun toggle8D() {
         _is8DEnabled.value = !_is8DEnabled.value
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
     }
 
-    // --- اعمال پریست COMA (با پشتیبانی از افکت محیطی) ---
+    // ─── Dynamics (کیفیت استودیویی) ───
+    fun toggleDynamics() {
+        _isDynamicsEnabled.value = !_isDynamicsEnabled.value
+        dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
+    }
 
+    // ─── اعمال پریست COMA ───
     fun applyComaPreset(preset: ComaPreset) {
         // ۱. سرعت
         _currentSpeed.value = preset.speed
@@ -236,8 +255,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- افکت‌های محیطی (دستی) ---
-
+    // ─── افکت‌های محیطی (دستی) ───
     fun toggleAmbient(type: AmbientSoundManager.SoundType) {
         if (_activeAmbient.value == type) {
             ambientManager.stop()
@@ -258,18 +276,22 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _activeAmbient.value = null
     }
 
-    // --- پخش/توقف ---
-
+    // ─── پخش/توقف ───
     fun playPause() {
         if (player.isPlaying) player.pause() else player.play()
     }
 
-    // --- ضبط ---
-
+    // ─── ضبط ───
     fun startRecording(mediaProjection: MediaProjection) {
         _recordingError.value = null
         _lastSavedUri.value = null
         _recordingSeconds.value = 0L
+
+        // 🔑 نکته مهم: با فعال بودن Dynamics، کیفیت ضبط بالاتر می‌ره
+        if (!_isDynamicsEnabled.value) {
+            _isDynamicsEnabled.value = true
+            dynamicsManager?.setEnabled(true)
+        }
 
         val started = audioExporter.startRecording(mediaProjection)
         if (started) {
@@ -289,12 +311,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _recordingError.value = null
     }
 
-    // --- آزادسازی ---
-
+    // ─── آزادسازی ───
     override fun onCleared() {
         super.onCleared()
         if (_isRecording.value) audioExporter.stopRecording()
         ambientManager.stop()
+        dynamicsManager?.release()
         effectsManager?.release()
         player.release()
     }
