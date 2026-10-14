@@ -5,11 +5,12 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
+import android.media.MediaCodec
+import android.media.MediaCodecInfo
+import android.media.MediaFormat
+import android.media.MediaMuxer
 import android.media.projection.MediaProjection
-import android.os.Environment
 import java.io.File
-import java.io.FileOutputStream
-import java.io.RandomAccessFile
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -26,44 +27,48 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((File) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // نرخ نمونه‌برداری و بیت‌ریت
+    // تنظیمات ثابت صوتی
     private val sampleRate = 44100
-    private val channelConfig = AudioFormat.CHANNEL_IN_STEREO
-    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
-    private val channelMask = AudioFormat.CHANNEL_IN_LEFT or AudioFormat.CHANNEL_IN_RIGHT
+    private val channelCount = 2
+    private val bitRate = 192 * 1024 // 192 kbps
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
-            val config = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
+            // ۱. آماده‌سازی AudioRecord برای ضبط صدای اپ
+            val captureConfig = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
             val bufferSize = AudioRecord.getMinBufferSize(
-                sampleRate, channelConfig, audioFormat
+                sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
             ).coerceAtLeast(sampleRate * 2)
 
             audioRecord = AudioRecord.Builder()
                 .setAudioFormat(
                     AudioFormat.Builder()
-                        .setEncoding(audioFormat)
+                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
                         .setSampleRate(sampleRate)
-                        .setChannelMask(channelConfig)
+                        .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                         .build()
                 )
                 .setBufferSizeInBytes(bufferSize)
-                .setAudioPlaybackCaptureConfig(config)
+                .setAudioPlaybackCaptureConfig(captureConfig)
                 .build()
 
-            // ساخت فایل خروجی
+            if (audioRecord?.state != AudioRecord.STATE_INITIALIZED) {
+                onError?.invoke("AudioRecord راه‌اندازی نشد")
+                return false
+            }
+
             outputFile = createOutputFile()
             audioRecord?.startRecording()
             isRecording = true
 
-            // شروع thread ضبط
             recordingThread = thread {
-                writeAudioDataToFile(bufferSize)
+                // ۲. ضبط و انکود در یک Thread جداگانه
+                encodeAndWriteAudio(bufferSize)
             }
 
             true
@@ -83,109 +88,127 @@ class AudioExporter(private val context: Context) {
         } catch (e: Exception) {
             e.printStackTrace()
         }
-        recordingThread?.join(1000)
+        recordingThread?.join(2000)
         recordingThread = null
-
-        outputFile?.let {
-            addWavHeader(it)
-            onFinish?.invoke(it)
-        }
     }
 
-    private fun writeAudioDataToFile(bufferSize: Int) {
-        val data = ByteArray(bufferSize)
-        var totalBytes: Long = 0
+    private fun encodeAndWriteAudio(bufferSize: Int) {
+        val muxer = MediaMuxer(outputFile!!.path, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
+        var trackIndex = -1
+        var muxerStarted = false
 
-        FileOutputStream(outputFile).use { outputStream ->
+        try {
+            // ۳. پیکربندی انکودر AAC
+            val format = MediaFormat.createAudioFormat(
+                MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount
+            ).apply {
+                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
+                setInteger(
+                    MediaFormat.KEY_AAC_PROFILE,
+                    MediaCodecInfo.CodecProfileLevel.AACObjectLC
+                )
+            }
+
+            val codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
+            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
+            codec.start()
+
+            val bufferInfo = MediaCodec.BufferInfo()
+            val pcmBuffer = ByteArray(bufferSize)
+            var totalBytesRead: Long = 0
+            var presentationTimeUs: Long = 0
+            val timeoutUs = 10000L
+
+            // ۴. حلقه اصلی: خواندن PCM و فرستادن به انکودر
             while (isRecording) {
-                val read = audioRecord?.read(data, 0, bufferSize) ?: -1
-                if (read > 0) {
-                    outputStream.write(data, 0, read)
-                    totalBytes += read
-                    onProgress?.invoke(totalBytes)
+                val bytesRead = audioRecord?.read(pcmBuffer, 0, pcmBuffer.size) ?: -1
+                if (bytesRead <= 0) continue
+
+                totalBytesRead += bytesRead
+
+                // ورودی به انکودر
+                val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
+                if (inputBufferIndex >= 0) {
+                    val inputBuffer = codec.getInputBuffer(inputBufferIndex)!!
+                    inputBuffer.clear()
+                    inputBuffer.put(pcmBuffer, 0, bytesRead)
+                    codec.queueInputBuffer(inputBufferIndex, 0, bytesRead, presentationTimeUs, 0)
+                    presentationTimeUs += (bytesRead.toLong() * 1_000_000L) /
+                            (sampleRate.toLong() * channelCount * 2)
+                }
+
+                // خروجی از انکودر
+                var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
+                while (outputBufferIndex >= 0) {
+                    val outputBuffer = codec.getOutputBuffer(outputBufferIndex)!!
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                        bufferInfo.size = 0
+                    }
+
+                    if (bufferInfo.size > 0) {
+                        if (!muxerStarted) {
+                            val newFormat = codec.outputFormat
+                            trackIndex = muxer.addTrack(newFormat)
+                            muxer.start()
+                            muxerStarted = true
+                        }
+                        outputBuffer.position(bufferInfo.offset)
+                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                        muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                    }
+
+                    codec.releaseOutputBuffer(outputBufferIndex, false)
+                    outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
+                }
+
+                onProgress?.invoke(totalBytesRead)
+            }
+
+            // ۵. پایان کار و آزادسازی منابع
+            if (muxerStarted) {
+                val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
+                if (inputBufferIndex >= 0) {
+                    codec.queueInputBuffer(
+                        inputBufferIndex, 0, 0, presentationTimeUs,
+                        MediaCodec.BUFFER_FLAG_END_OF_STREAM
+                    )
+                }
+
+                var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
+                while (outputBufferIndex >= 0) {
+                    val outputBuffer = codec.getOutputBuffer(outputBufferIndex)!!
+                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
+                        bufferInfo.size = 0
+                    }
+                    if (bufferInfo.size > 0) {
+                        outputBuffer.position(bufferInfo.offset)
+                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
+                        muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
+                    }
+                    codec.releaseOutputBuffer(outputBufferIndex, false)
+                    outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
                 }
             }
+
+            codec.stop()
+            codec.release()
+            muxer.stop()
+            muxer.release()
+
+            outputFile?.let { onFinish?.invoke(it) }
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onError?.invoke(e.message ?: "خطا در انکود و ذخیره فایل")
+            try { muxer.release() } catch (_: Exception) {}
         }
     }
 
     private fun createOutputFile(): File {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "RemixLab_$timestamp.wav"
-
-        val dir = File(
-            Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_MUSIC),
-            "RemixLab"
-        )
+        val fileName = "RemixLab_$timestamp.m4a"
+        val dir = File(context.getExternalFilesDir(null), "Recordings")
         if (!dir.exists()) dir.mkdirs()
-
         return File(dir, fileName)
-    }
-
-    /**
-     * اضافه کردن هدر WAV به فایل PCM خام
-     */
-    private fun addWavHeader(file: File) {
-        try {
-            val randomAccessFile = RandomAccessFile(file, "rw")
-            val fileSize = randomAccessFile.length()
-            val totalAudioLen = fileSize
-            val totalDataLen = totalAudioLen + 36
-            val channels = 2
-            val byteRate = sampleRate * channels * 2
-
-            val header = ByteArray(44)
-
-            header[0] = 'R'.code.toByte()
-            header[1] = 'I'.code.toByte()
-            header[2] = 'F'.code.toByte()
-            header[3] = 'F'.code.toByte()
-            header[4] = (totalDataLen and 0xff).toByte()
-            header[5] = ((totalDataLen shr 8) and 0xff).toByte()
-            header[6] = ((totalDataLen shr 16) and 0xff).toByte()
-            header[7] = ((totalDataLen shr 24) and 0xff).toByte()
-            header[8] = 'W'.code.toByte()
-            header[9] = 'A'.code.toByte()
-            header[10] = 'V'.code.toByte()
-            header[11] = 'E'.code.toByte()
-            header[12] = 'f'.code.toByte()
-            header[13] = 'm'.code.toByte()
-            header[14] = 't'.code.toByte()
-            header[15] = ' '.code.toByte()
-            header[16] = 16
-            header[17] = 0
-            header[18] = 0
-            header[19] = 0
-            header[20] = 1
-            header[21] = 0
-            header[22] = channels.toByte()
-            header[23] = 0
-            header[24] = (sampleRate and 0xff).toByte()
-            header[25] = ((sampleRate shr 8) and 0xff).toByte()
-            header[26] = ((sampleRate shr 16) and 0xff).toByte()
-            header[27] = ((sampleRate shr 24) and 0xff).toByte()
-            header[28] = (byteRate and 0xff).toByte()
-            header[29] = ((byteRate shr 8) and 0xff).toByte()
-            header[30] = ((byteRate shr 16) and 0xff).toByte()
-            header[31] = ((byteRate shr 24) and 0xff).toByte()
-            header[32] = (channels * 2).toByte()
-            header[33] = 0
-            header[34] = 16
-            header[35] = 0
-            header[36] = 'd'.code.toByte()
-            header[37] = 'a'.code.toByte()
-            header[38] = 't'.code.toByte()
-            header[39] = 'a'.code.toByte()
-            header[40] = (totalAudioLen and 0xff).toByte()
-            header[41] = ((totalAudioLen shr 8) and 0xff).toByte()
-            header[42] = ((totalAudioLen shr 16) and 0xff).toByte()
-            header[43] = ((totalAudioLen shr 24) and 0xff).toByte()
-
-            // نوشتن هدر در ابتدای فایل
-            randomAccessFile.seek(0)
-            randomAccessFile.write(header, 0, 44)
-            randomAccessFile.close()
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
     }
 }
