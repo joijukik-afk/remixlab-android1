@@ -33,10 +33,10 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // نرخ نمونه‌برداری استودیویی
-    private val sampleRate = 48000
-    private val channelCount = 2
-    private val bitRate = 256 * 1024
+    // ─── تنظیمات استودیویی ───
+    private val sampleRate = 48000              // 48 kHz (کیفیت استودیویی)
+    private val channelCount = 2                // Stereo
+    private val bitRate = 320 * 1024            // 320 kbps (بالاترین کیفیت AAC)
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
@@ -46,11 +46,13 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // 🔑 بافر بزرگ‌تر برای حذف خش صدا (Underrun)
+            // 🔑 بافر ۴ برابر برای حذف کامل underrun (خش صدا)
             val minBufferSize = AudioRecord.getMinBufferSize(
-                sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
+                sampleRate,
+                AudioFormat.CHANNEL_IN_STEREO,
+                AudioFormat.ENCODING_PCM_16BIT
             )
-            val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate)
+            val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate * 2)
 
             val record = AudioRecord.Builder()
                 .setAudioFormat(
@@ -111,7 +113,10 @@ class AudioExporter(private val context: Context) {
                     MediaFormat.KEY_AAC_PROFILE,
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 )
-                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
+                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize * 2)
+                // کانال‌های خروجی استریو
+                setInteger(MediaFormat.KEY_CHANNEL_COUNT, channelCount)
+                setInteger(MediaFormat.KEY_SAMPLE_RATE, sampleRate)
             }
 
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
@@ -137,6 +142,7 @@ class AudioExporter(private val context: Context) {
 
                 totalBytesRead += bytesRead
 
+                // ─── ورودی به انکودر ───
                 val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
                 if (inputBufferIndex >= 0) {
                     val inputBuffer = codec.getInputBuffer(inputBufferIndex)
@@ -151,6 +157,7 @@ class AudioExporter(private val context: Context) {
                     }
                 }
 
+                // ─── خروجی از انکودر ───
                 var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
                 while (outputBufferIndex >= 0) {
                     val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
@@ -177,7 +184,7 @@ class AudioExporter(private val context: Context) {
                 onProgress?.invoke(totalBytesRead)
             }
 
-            // Flush نهایی
+            // ─── Flush نهایی ───
             val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
             if (inputBufferIndex >= 0) {
                 codec.queueInputBuffer(
@@ -201,6 +208,7 @@ class AudioExporter(private val context: Context) {
                 outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
             }
 
+            // ─── بستن تمیز ───
             try { codec.stop() } catch (_: Exception) {}
             try { codec.release() } catch (_: Exception) {}
             try { if (muxerStarted) muxer.stop() } catch (_: Exception) {}
