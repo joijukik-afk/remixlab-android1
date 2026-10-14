@@ -15,6 +15,8 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
+import com.arthenica.ffmpegkit.FFmpegKit
+import com.arthenica.ffmpegkit.ReturnCode
 import java.io.File
 import java.io.FileInputStream
 import java.text.SimpleDateFormat
@@ -33,10 +35,9 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // ─── تنظیمات استودیویی ───
-    private val sampleRate = 48000              // 48 kHz (کیفیت استودیویی)
-    private val channelCount = 2                // Stereo
-    private val bitRate = 320 * 1024            // 320 kbps (بالاترین کیفیت AAC)
+    private val sampleRate = 48000
+    private val channelCount = 2
+    private val bitRate = 256 * 1024
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
@@ -46,11 +47,8 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // بافر ۴ برابر برای حذف کامل underrun (خش صدا)
             val minBufferSize = AudioRecord.getMinBufferSize(
-                sampleRate,
-                AudioFormat.CHANNEL_IN_STEREO,
-                AudioFormat.ENCODING_PCM_16BIT
+                sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
             )
             val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate * 2)
 
@@ -78,7 +76,7 @@ class AudioExporter(private val context: Context) {
             isRecording = true
 
             recordingThread = thread {
-                encodeAndWriteAudio(bufferSize)
+                encodeToM4a(bufferSize)
             }
 
             true
@@ -93,7 +91,7 @@ class AudioExporter(private val context: Context) {
         isRecording = false
     }
 
-    private fun encodeAndWriteAudio(bufferSize: Int) {
+    private fun encodeToM4a(bufferSize: Int) {
         val file = outputFile ?: run {
             onError?.invoke("فایل خروجی وجود ندارد")
             return
@@ -109,10 +107,7 @@ class AudioExporter(private val context: Context) {
                 MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount
             ).apply {
                 setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
-                setInteger(
-                    MediaFormat.KEY_AAC_PROFILE,
-                    MediaCodecInfo.CodecProfileLevel.AACObjectLC
-                )
+                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize * 2)
                 setInteger(MediaFormat.KEY_CHANNEL_COUNT, channelCount)
                 setInteger(MediaFormat.KEY_SAMPLE_RATE, sampleRate)
@@ -138,36 +133,28 @@ class AudioExporter(private val context: Context) {
             while (isRecording) {
                 val bytesRead = record.read(pcmBuffer, 0, pcmBuffer.size)
                 if (bytesRead <= 0) continue
-
                 totalBytesRead += bytesRead
 
-                // ─── ورودی به انکودر ───
                 val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
                 if (inputBufferIndex >= 0) {
                     val inputBuffer = codec.getInputBuffer(inputBufferIndex)
                     if (inputBuffer != null) {
                         inputBuffer.clear()
                         inputBuffer.put(pcmBuffer, 0, bytesRead)
-                        codec.queueInputBuffer(
-                            inputBufferIndex, 0, bytesRead, presentationTimeUs, 0
-                        )
-                        presentationTimeUs += (bytesRead.toLong() * 1_000_000L) /
-                                (sampleRate.toLong() * channelCount * 2)
+                        codec.queueInputBuffer(inputBufferIndex, 0, bytesRead, presentationTimeUs, 0)
+                        presentationTimeUs += (bytesRead.toLong() * 1_000_000L) / (sampleRate.toLong() * channelCount * 2)
                     }
                 }
 
-                // ─── خروجی از انکودر ───
                 var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
                 while (outputBufferIndex >= 0) {
                     val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
                     if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
                         bufferInfo.size = 0
                     }
-
                     if (bufferInfo.size > 0 && outputBuffer != null) {
                         if (!muxerStarted) {
-                            val newFormat = codec.outputFormat
-                            trackIndex = muxer.addTrack(newFormat)
+                            trackIndex = muxer.addTrack(codec.outputFormat)
                             muxer.start()
                             muxerStarted = true
                         }
@@ -175,29 +162,20 @@ class AudioExporter(private val context: Context) {
                         outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
                         muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
                     }
-
                     codec.releaseOutputBuffer(outputBufferIndex, false)
                     outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
                 }
-
                 onProgress?.invoke(totalBytesRead)
             }
 
-            // ─── Flush نهایی ───
             val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
             if (inputBufferIndex >= 0) {
-                codec.queueInputBuffer(
-                    inputBufferIndex, 0, 0, presentationTimeUs,
-                    MediaCodec.BUFFER_FLAG_END_OF_STREAM
-                )
+                codec.queueInputBuffer(inputBufferIndex, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
             }
-
             var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
             while (outputBufferIndex >= 0) {
                 val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
-                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                    bufferInfo.size = 0
-                }
+                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) bufferInfo.size = 0
                 if (bufferInfo.size > 0 && outputBuffer != null && muxerStarted) {
                     outputBuffer.position(bufferInfo.offset)
                     outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
@@ -207,24 +185,20 @@ class AudioExporter(private val context: Context) {
                 outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
             }
 
-            // ─── بستن تمیز ───
             try { codec.stop() } catch (_: Exception) {}
             try { codec.release() } catch (_: Exception) {}
             try { if (muxerStarted) muxer.stop() } catch (_: Exception) {}
             try { muxer.release() } catch (_: Exception) {}
-
             try { record.stop() } catch (_: Exception) {}
             try { record.release() } catch (_: Exception) {}
             audioRecord = null
 
-            // ─── ذخیره در MediaStore ───
-            saveToMediaStore(file)
+            // 🔑 حالا M4A رو به MP3 تبدیل کن
+            convertM4aToMp3(file)
 
         } catch (e: Exception) {
             e.printStackTrace()
-            val errorMsg = "${e.javaClass.simpleName}: ${e.message ?: "خطای ناشناخته"}"
-            onError?.invoke(errorMsg)
-
+            onError?.invoke("${e.javaClass.simpleName}: ${e.message}")
             try { codec?.stop() } catch (_: Exception) {}
             try { codec?.release() } catch (_: Exception) {}
             try { muxer?.release() } catch (_: Exception) {}
@@ -238,22 +212,43 @@ class AudioExporter(private val context: Context) {
     }
 
     /**
-     * ذخیره فایل temp توی MediaStore (پوشه Music/RemixLab)
-     * با استفاده از IS_PENDING برای اطمینان از کامل شدن نوشتن
+     * تبدیل فایل M4A به MP3 با FFmpeg
      */
-    private fun saveToMediaStore(tempFile: File) {
+    private fun convertM4aToMp3(m4aFile: File) {
+        val mp3File = File(m4aFile.parentFile, m4aFile.nameWithoutExtension + ".mp3")
+
+        val command = "-y -i \"${m4aFile.absolutePath}\" -codec:a libmp3lame -b:a 320k \"${mp3File.absolutePath}\""
+
+        FFmpegKit.executeAsync(command) { session ->
+            val returnCode = session.returnCode
+            if (ReturnCode.isSuccess(returnCode)) {
+                // تبدیل موفق - فایل M4A رو پاک کن و MP3 رو ذخیره کن
+                m4aFile.delete()
+                saveMp3ToMediaStore(mp3File)
+            } else {
+                onError?.invoke("خطا در تبدیل به MP3: ${session.failStackTrace ?: "خطای ناشناخته"}")
+                // اگه تبدیل نشد، حداقل فایل M4A رو ذخیره کن
+                saveM4aToMediaStore(m4aFile)
+            }
+        }
+    }
+
+    /**
+     * ذخیره فایل MP3 در پوشه Music/RemixLab
+     */
+    private fun saveMp3ToMediaStore(mp3File: File) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "RemixLab_$timestamp.m4a"
+        val fileName = "RemixLab_$timestamp.mp3"
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
             put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
             put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/RemixLab")
-                put(MediaStore.Audio.Media.IS_PENDING, 1) // علامت‌گذاری به عنوان در حال نوشتن
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }
 
@@ -265,31 +260,80 @@ class AudioExporter(private val context: Context) {
 
         val uri = context.contentResolver.insert(collection, values)
         if (uri == null) {
-            onError?.invoke("خطا در ایجاد فایل در MediaStore")
+            onError?.invoke("خطا در ثبت MP3 در MediaStore")
             return
         }
 
         try {
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                FileInputStream(tempFile).use { inputStream ->
+                FileInputStream(mp3File).use { inputStream ->
                     inputStream.copyTo(outputStream)
                 }
             }
 
-            // پس از نوشتن، IS_PENDING را صفر کن تا فایل برای سایر برنامه‌ها قابل مشاهده شود
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 values.clear()
                 values.put(MediaStore.Audio.Media.IS_PENDING, 0)
                 context.contentResolver.update(uri, values, null, null)
             }
 
-            tempFile.delete()
+            mp3File.delete()
             onFinish?.invoke(uri)
 
         } catch (e: Exception) {
             e.printStackTrace()
-            context.contentResolver.delete(uri, null, null) // حذف فایل ناقص
-            onError?.invoke("خطا در ذخیره فایل: ${e.message}")
+            context.contentResolver.delete(uri, null, null)
+            onError?.invoke("خطا در ذخیره MP3: ${e.message}")
+        }
+    }
+
+    /**
+     * ذخیره فایل M4A (در صورت خطای تبدیل) - fallback
+     */
+    private fun saveM4aToMediaStore(m4aFile: File) {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val fileName = "RemixLab_$timestamp.m4a"
+
+        val values = ContentValues().apply {
+            put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
+            put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
+            put(MediaStore.Audio.Media.IS_MUSIC, 1)
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/RemixLab")
+                put(MediaStore.Audio.Media.IS_PENDING, 1)
+            }
+        }
+
+        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
+        } else {
+            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
+        }
+
+        val uri = context.contentResolver.insert(collection, values) ?: return
+
+        try {
+            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
+                FileInputStream(m4aFile).use { inputStream ->
+                    inputStream.copyTo(outputStream)
+                }
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                values.clear()
+                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
+                context.contentResolver.update(uri, values, null, null)
+            }
+
+            m4aFile.delete()
+            onFinish?.invoke(uri)
+
+        } catch (e: Exception) {
+            e.printStackTrace()
+            context.contentResolver.delete(uri, null, null)
+            onError?.invoke("خطا در ذخیره M4A: ${e.message}")
         }
     }
 
