@@ -1,36 +1,20 @@
 package com.joijukik.remixlab
 
 import android.content.Context
+import android.content.Intent
 import android.media.projection.MediaProjectionManager
 import android.net.Uri
+import android.os.Build
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Arrangement
-import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.Row
-import androidx.compose.foundation.layout.Spacer
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.height
-import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
-import androidx.compose.material3.ButtonDefaults
-import androidx.compose.material3.Card
-import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Slider
-import androidx.compose.material3.Surface
-import androidx.compose.material3.Text
-import androidx.compose.runtime.Composable
-import androidx.compose.runtime.collectAsState
-import androidx.compose.runtime.getValue
+import androidx.compose.material3.*
+import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -72,17 +56,16 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val lastSavedFile by viewModel.lastSavedFile.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
-    // --- انتخاب آهنگ ---
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
     }
 
-    // --- درخواست اجازه ضبط ---
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
+    // 🔑 نکته کلیدی: اول سرویس رو استارت کن، بعد درخواست MediaProjection بده
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -103,7 +86,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // --- عنوان ---
         Text(
             text = "RemixLab",
             style = MaterialTheme.typography.headlineLarge
@@ -118,7 +100,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // --- دکمه انتخاب آهنگ ---
         Button(
             onClick = { audioPicker.launch("audio/*") },
             modifier = Modifier.fillMaxWidth()
@@ -128,9 +109,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ============================================
-        // پنل COMA AUDIO LAB
-        // ============================================
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -179,9 +157,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ============================================
-        // کنترل‌های دستی
-        // ============================================
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -227,9 +202,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ============================================
-        // افکت‌های پایه
-        // ============================================
         Text(
             text = "افکت‌ها",
             style = MaterialTheme.typography.titleMedium,
@@ -343,7 +315,21 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                             viewModel.stopRecording()
                         } else {
                             viewModel.clearRecordingError()
-                            projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
+
+                            // 🔑 مراحل کلیدی برای اندروید ۱۴:
+                            // ۱. اول سرویس رو استارت کن
+                            val serviceIntent = Intent(context, MediaProjectionService::class.java)
+                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                                context.startForegroundService(serviceIntent)
+                            } else {
+                                context.startService(serviceIntent)
+                            }
+
+                            // ۲. بعد از یک تاخیر کوتاه، درخواست MediaProjection بده
+                            // (کد درخواست در کالبک projectionLauncher انجام می‌شود)
+                            projectionLauncher.launch(
+                                projectionManager.createScreenCaptureIntent()
+                            )
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -364,7 +350,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // --- دکمه پخش/توقف ---
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
@@ -407,9 +392,6 @@ fun PresetButton(
     }
 }
 
-/**
- * تبدیل ثانیه به فرمت mm:ss
- */
 private fun formatTime(seconds: Long): String {
     val mins = seconds / 60
     val secs = seconds % 60
