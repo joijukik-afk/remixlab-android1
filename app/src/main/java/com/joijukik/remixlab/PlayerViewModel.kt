@@ -1,26 +1,21 @@
 package com.joijukik.remixlab
 
 import android.app.Application
+import android.media.audiofx.PresetReverb
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.media3.common.MediaItem
+import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
-import androidx.media3.exoplayer.audio.DefaultAudioSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    private val audioProcessor = RemixAudioProcessor()
+    val player: ExoPlayer = ExoPlayer.Builder(application).build()
 
-    private val audioSink: DefaultAudioSink = DefaultAudioSink.Builder(application)
-        .setAudioProcessors(arrayOf(audioProcessor))
-        .build()
-
-    val player: ExoPlayer = ExoPlayer.Builder(application)
-        .setAudioSink(audioSink)
-        .build()
+    private var reverb: PresetReverb? = null
 
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
@@ -45,29 +40,45 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
-        audioProcessor.setAudioSessionId(player.audioSessionId)
+        setupReverbIfNeeded()
         player.play()
     }
 
     fun toggleSlowed() {
         _isSlowed.value = !_isSlowed.value
         if (_isSlowed.value) {
-            audioProcessor.setSpeed(0.8f)
+            player.playbackParameters = PlaybackParameters(0.8f)
             _currentSpeed.value = 0.8f
         } else {
-            audioProcessor.setSpeed(1.0f)
+            player.playbackParameters = PlaybackParameters(1.0f)
             _currentSpeed.value = 1.0f
         }
     }
 
     fun toggleReverb() {
         _isReverbEnabled.value = !_isReverbEnabled.value
-        audioProcessor.enableReverb(_isReverbEnabled.value)
+        setupReverbIfNeeded()
+        reverb?.enabled = _isReverbEnabled.value
+    }
+
+    private fun setupReverbIfNeeded() {
+        if (reverb == null) {
+            val sessionId = player.audioSessionId
+            if (sessionId != 0) {
+                try {
+                    reverb = PresetReverb(0, sessionId).apply {
+                        preset = PresetReverb.PRESET_LARGEHALL
+                    }
+                } catch (e: Exception) {
+                    e.printStackTrace()
+                }
+            }
+        }
     }
 
     fun setCustomSpeed(speed: Float) {
         _currentSpeed.value = speed
-        audioProcessor.setSpeed(speed)
+        player.playbackParameters = PlaybackParameters(speed)
         _isSlowed.value = speed < 1.0f
     }
 
@@ -81,6 +92,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     override fun onCleared() {
         super.onCleared()
+        reverb?.release()
         player.release()
     }
 }
