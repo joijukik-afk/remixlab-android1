@@ -1,6 +1,7 @@
 package com.joijukik.remixlab
 
-import android.media.audiofx.PresetReverb
+import android.content.Context
+import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -18,9 +19,9 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.Divider
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
@@ -32,6 +33,7 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -55,6 +57,8 @@ class MainActivity : ComponentActivity() {
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
+    val context = LocalContext.current
+
     val isSlowed by viewModel.isSlowed.collectAsState()
     val isReverbEnabled by viewModel.isReverbEnabled.collectAsState()
     val isBassBoostEnabled by viewModel.isBassBoostEnabled.collectAsState()
@@ -63,10 +67,31 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val currentPitch by viewModel.currentPitch.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
+    val isRecording by viewModel.isRecording.collectAsState()
+    val recordingSeconds by viewModel.recordingSeconds.collectAsState()
+    val lastSavedFile by viewModel.lastSavedFile.collectAsState()
+    val recordingError by viewModel.recordingError.collectAsState()
+
+    // --- انتخاب آهنگ ---
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
+    }
+
+    // --- درخواست اجازه ضبط ---
+    val projectionManager =
+        context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
+
+    val projectionLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            val projection = projectionManager.getMediaProjection(
+                result.resultCode, result.data!!
+            )
+            viewModel.startRecording(projection)
+        }
     }
 
     Column(
@@ -126,7 +151,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // دکمه‌های پریست - ۲ تا در هر ردیف
                 val presets = ComaPresets.all
                 for (i in presets.indices step 2) {
                     Row(
@@ -173,7 +197,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(16.dp))
 
-                // --- سرعت ---
                 Text(
                     text = "سرعت: ${"%.2f".format(currentSpeed)}x",
                     style = MaterialTheme.typography.bodyMedium
@@ -188,7 +211,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                // --- گام ---
                 Text(
                     text = "گام: ${"%.2f".format(currentPitch)}x",
                     style = MaterialTheme.typography.bodyMedium
@@ -257,6 +279,91 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // ============================================
+        // بخش ضبط (Export)
+        // ============================================
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.primaryContainer
+            )
+        ) {
+            Column(
+                modifier = Modifier.padding(16.dp),
+                horizontalAlignment = Alignment.CenterHorizontally
+            ) {
+                Text(
+                    text = "💾 ذخیره ریمیکس",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                if (isRecording) {
+                    Text(
+                        text = "⏺️ در حال ضبط... ${formatTime(recordingSeconds)}",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.error,
+                        fontWeight = FontWeight.Bold
+                    )
+                } else if (lastSavedFile != null) {
+                    Text(
+                        text = "✅ ذخیره شد!",
+                        style = MaterialTheme.typography.bodyLarge,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontWeight = FontWeight.Bold
+                    )
+                    Spacer(modifier = Modifier.height(4.dp))
+                    Text(
+                        text = lastSavedFile!!.name,
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                } else {
+                    Text(
+                        text = "برای ضبط، روی دکمه زیر بزن",
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+
+                if (recordingError != null) {
+                    Spacer(modifier = Modifier.height(8.dp))
+                    Text(
+                        text = "❌ ${recordingError}",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        if (isRecording) {
+                            viewModel.stopRecording()
+                        } else {
+                            viewModel.clearRecordingError()
+                            projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    colors = ButtonDefaults.buttonColors(
+                        containerColor = if (isRecording)
+                            MaterialTheme.colorScheme.error
+                        else
+                            MaterialTheme.colorScheme.primary
+                    )
+                ) {
+                    Text(
+                        text = if (isRecording) "⏹ توقف ضبط" else "⏺️ شروع ضبط",
+                        style = MaterialTheme.typography.titleMedium
+                    )
+                }
+            }
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
         // --- دکمه پخش/توقف ---
         Button(
             onClick = { viewModel.playPause() },
@@ -298,4 +405,13 @@ fun PresetButton(
             )
         }
     }
+}
+
+/**
+ * تبدیل ثانیه به فرمت mm:ss
+ */
+private fun formatTime(seconds: Long): String {
+    val mins = seconds / 60
+    val secs = seconds % 60
+    return "%02d:%02d".format(mins, secs)
 }
