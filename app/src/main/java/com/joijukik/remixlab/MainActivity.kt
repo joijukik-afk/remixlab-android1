@@ -50,6 +50,8 @@ class MainActivity : ComponentActivity() {
 fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val isSlowed by viewModel.isSlowed.collectAsState()
     val isReverbEnabled by viewModel.isReverbEnabled.collectAsState()
+    val isBassBoostEnabled by viewModel.isBassBoostEnabled.collectAsState()
+    val is8DEnabled by viewModel.is8DEnabled.collectAsState()
     val currentSpeed by viewModel.currentSpeed.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
@@ -66,6 +68,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center
     ) {
+        // --- عنوان ---
         Text(
             text = "RemixLab",
             style = MaterialTheme.typography.headlineLarge
@@ -80,6 +83,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(48.dp))
 
+        // --- دکمه انتخاب آهنگ ---
         Button(
             onClick = { audioPicker.launch("audio/*") },
             modifier = Modifier.fillMaxWidth()
@@ -89,6 +93,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // --- نمایش سرعت ---
         Text(
             text = "سرعت: ${"%.2f".format(currentSpeed)}x",
             style = MaterialTheme.typography.titleMedium
@@ -96,6 +101,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(8.dp))
 
+        // --- اسلایدر سرعت ---
         Slider(
             value = currentSpeed,
             onValueChange = { viewModel.setCustomSpeed(it) },
@@ -106,6 +112,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // --- ردیف اول افکت‌ها: Slowed + Reverb ---
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -124,8 +131,30 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             )
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // --- ردیف دوم افکت‌ها: Bass Boost + 8D Audio ---
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            FilterChip(
+                selected = isBassBoostEnabled,
+                onClick = { viewModel.toggleBassBoost() },
+                label = { Text("Bass Boost") },
+                modifier = Modifier.weight(1f)
+            )
+            FilterChip(
+                selected = is8DEnabled,
+                onClick = { viewModel.toggle8D() },
+                label = { Text("8D Audio") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
 
+        // --- دکمه پخش/توقف ---
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
