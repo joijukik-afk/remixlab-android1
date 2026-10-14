@@ -1,6 +1,7 @@
 package com.joijukik.remixlab
 
 import android.app.Application
+import android.media.audiofx.PresetReverb
 import android.net.Uri
 import androidx.lifecycle.AndroidViewModel
 import androidx.media3.common.MediaItem
@@ -16,7 +17,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private var effectsManager: AudioEffectsManager? = null
 
-    // --- State ها برای UI ---
+    // --- State ها ---
 
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
@@ -33,8 +34,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentSpeed = MutableStateFlow(1.0f)
     val currentSpeed: StateFlow<Float> = _currentSpeed
 
+    private val _currentPitch = MutableStateFlow(1.0f)
+    val currentPitch: StateFlow<Float> = _currentPitch
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
+
+    private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
+    val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
     init {
         player.addListener(object : Player.Listener {
@@ -56,13 +63,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             e.printStackTrace()
             null
         }
-        // اگه افکت‌ها قبلاً روشن بودن، دوباره اعمال کن
-        effectsManager?.setReverbEnabled(_isReverbEnabled.value)
+        // اعمال مجدد افکت‌های فعال
+        effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
     }
 
-    // --- بارگذاری و پخش آهنگ ---
+    // --- بارگذاری آهنگ ---
 
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
@@ -75,27 +82,47 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     fun toggleSlowed() {
         _isSlowed.value = !_isSlowed.value
         if (_isSlowed.value) {
-            player.playbackParameters = PlaybackParameters(0.8f)
-            _currentSpeed.value = 0.8f
+            setSpeedInternal(0.8f)
         } else {
-            player.playbackParameters = PlaybackParameters(1.0f)
-            _currentSpeed.value = 1.0f
+            setSpeedInternal(1.0f)
         }
     }
 
-    // --- سرعت دلخواه (اسلایدر) ---
+    // --- سرعت ---
 
     fun setCustomSpeed(speed: Float) {
+        setSpeedInternal(speed)
+    }
+
+    private fun setSpeedInternal(speed: Float) {
         _currentSpeed.value = speed
-        player.playbackParameters = PlaybackParameters(speed)
         _isSlowed.value = speed < 1.0f
+        applyPlaybackParameters()
+    }
+
+    // --- گام (Pitch) ---
+
+    fun setPitch(pitch: Float) {
+        _currentPitch.value = pitch
+        applyPlaybackParameters()
+    }
+
+    private fun applyPlaybackParameters() {
+        player.playbackParameters = PlaybackParameters(_currentSpeed.value, _currentPitch.value)
     }
 
     // --- Reverb ---
 
     fun toggleReverb() {
         _isReverbEnabled.value = !_isReverbEnabled.value
-        effectsManager?.setReverbEnabled(_isReverbEnabled.value)
+        effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
+    }
+
+    fun setReverbPreset(preset: Short) {
+        _currentReverbPreset.value = preset
+        if (_isReverbEnabled.value) {
+            effectsManager?.setReverbEnabled(true, preset)
+        }
     }
 
     // --- Bass Boost ---
@@ -112,6 +139,38 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
     }
 
+    // --- اعمال پریست COMA ---
+
+    fun applyComaPreset(preset: ComaPreset) {
+        // سرعت
+        _currentSpeed.value = preset.speed
+        _isSlowed.value = preset.speed < 1.0f
+
+        // گام
+        _currentPitch.value = preset.pitch
+
+        // اعمال هر دو با هم
+        applyPlaybackParameters()
+
+        // Reverb
+        if (preset.reverbPreset != null) {
+            _isReverbEnabled.value = true
+            _currentReverbPreset.value = preset.reverbPreset
+            effectsManager?.setReverbEnabled(true, preset.reverbPreset)
+        } else {
+            _isReverbEnabled.value = false
+            effectsManager?.setReverbEnabled(false)
+        }
+
+        // Bass Boost
+        _isBassBoostEnabled.value = preset.bassBoost
+        effectsManager?.setBassBoostEnabled(preset.bassBoost)
+
+        // Virtualizer
+        _is8DEnabled.value = preset.virtualizer
+        effectsManager?.setVirtualizerEnabled(preset.virtualizer)
+    }
+
     // --- پخش/توقف ---
 
     fun playPause() {
@@ -122,7 +181,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // --- آزادسازی منابع ---
+    // --- آزادسازی ---
 
     override fun onCleared() {
         super.onCleared()
