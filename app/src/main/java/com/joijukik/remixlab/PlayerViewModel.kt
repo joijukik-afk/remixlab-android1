@@ -6,6 +6,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.media3.common.MediaItem
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import androidx.media3.exoplayer.audio.DefaultAudioSink
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 
@@ -13,8 +14,12 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
 
     private val audioProcessor = RemixAudioProcessor()
 
-    val player: ExoPlayer = ExoPlayer.Builder(application)
+    private val audioSink: DefaultAudioSink = DefaultAudioSink.Builder(application)
         .setAudioProcessors(arrayOf(audioProcessor))
+        .build()
+
+    val player: ExoPlayer = ExoPlayer.Builder(application)
+        .setAudioSink(audioSink)
         .build()
 
     private val _isSlowed = MutableStateFlow(false)
