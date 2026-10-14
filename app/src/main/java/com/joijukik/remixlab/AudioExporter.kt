@@ -27,7 +27,8 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((File) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    private val sampleRate = 44100
+    // کیفیت بالاتر: 48kHz و 192 kbps
+    private val sampleRate = 48000
     private val channelCount = 2
     private val bitRate = 192 * 1024
 
@@ -79,8 +80,7 @@ class AudioExporter(private val context: Context) {
     }
 
     fun stopRecording() {
-        // فقط flag رو false کن - thread خودش می‌فهمه و تمیز می‌بنده
-        isRecording = false
+        isRecording = false // فقط flag رو false کن - thread خودش تمیز می‌بنده
     }
 
     private fun encodeAndWriteAudio(bufferSize: Int) {
@@ -104,6 +104,8 @@ class AudioExporter(private val context: Context) {
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 )
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
+                // کیفیت بالاتر AAC
+                setInteger(MediaFormat.KEY_AAC_ENCODING_QUALITY, 100)
             }
 
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
@@ -129,7 +131,7 @@ class AudioExporter(private val context: Context) {
 
                 totalBytesRead += bytesRead
 
-                // --- ورودی به انکودر ---
+                // ورودی به انکودر
                 val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
                 if (inputBufferIndex >= 0) {
                     val inputBuffer = codec.getInputBuffer(inputBufferIndex)
@@ -144,7 +146,7 @@ class AudioExporter(private val context: Context) {
                     }
                 }
 
-                // --- خروجی از انکودر ---
+                // خروجی از انکودر
                 var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
                 while (outputBufferIndex >= 0) {
                     val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
@@ -171,7 +173,7 @@ class AudioExporter(private val context: Context) {
                 onProgress?.invoke(totalBytesRead)
             }
 
-            // --- Flush نهایی ---
+            // Flush نهایی
             val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
             if (inputBufferIndex >= 0) {
                 codec.queueInputBuffer(
@@ -195,13 +197,13 @@ class AudioExporter(private val context: Context) {
                 outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
             }
 
-            // --- بستن تمیز ---
+            // بستن تمیز
             try { codec.stop() } catch (_: Exception) {}
             try { codec.release() } catch (_: Exception) {}
             try { if (muxerStarted) muxer.stop() } catch (_: Exception) {}
             try { muxer.release() } catch (_: Exception) {}
 
-            // --- آزادسازی AudioRecord ---
+            // آزادسازی AudioRecord
             try { record.stop() } catch (_: Exception) {}
             try { record.release() } catch (_: Exception) {}
             audioRecord = null
@@ -213,7 +215,6 @@ class AudioExporter(private val context: Context) {
             val errorMsg = "${e.javaClass.simpleName}: ${e.message ?: "خطای ناشناخته"}"
             onError?.invoke(errorMsg)
 
-            // آزادسازی منابع در صورت خطا
             try { codec?.stop() } catch (_: Exception) {}
             try { codec?.release() } catch (_: Exception) {}
             try { muxer?.release() } catch (_: Exception) {}
@@ -229,12 +230,9 @@ class AudioExporter(private val context: Context) {
     private fun createOutputFile(): File {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "RemixLab_$timestamp.m4a"
-
-        // پوشه اپ، اگه نبود پوشه cache
         val baseDir = context.getExternalFilesDir(null) ?: context.filesDir
         val dir = File(baseDir, "Recordings")
         if (!dir.exists()) dir.mkdirs()
-
         return File(dir, fileName)
     }
 }
