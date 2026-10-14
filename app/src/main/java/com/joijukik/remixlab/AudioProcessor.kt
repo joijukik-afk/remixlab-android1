@@ -6,7 +6,7 @@ import androidx.media3.common.audio.AudioProcessor
 import androidx.media3.common.audio.SonicAudioProcessor
 import java.nio.ByteBuffer
 
-class AudioProcessor : AudioProcessor {
+class RemixAudioProcessor : AudioProcessor {
 
     private val sonicProcessor = SonicAudioProcessor()
     private var reverb: PresetReverb? = null
@@ -43,6 +43,10 @@ class AudioProcessor : AudioProcessor {
 
     override fun queueInput(inputBuffer: ByteBuffer) {
         sonicProcessor.queueInput(inputBuffer)
+    }
+
+    override fun queueEndOfStream() {
+        sonicProcessor.queueEndOfStream()
     }
 
     override fun getOutput(): ByteBuffer = sonicProcessor.output
