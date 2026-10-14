@@ -6,9 +6,24 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
+import androidx.compose.material3.Button
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.unit.dp
@@ -35,8 +50,6 @@ class MainActivity : ComponentActivity() {
 fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val isSlowed by viewModel.isSlowed.collectAsState()
     val isReverbEnabled by viewModel.isReverbEnabled.collectAsState()
-    val isBassBoostEnabled by viewModel.isBassBoostEnabled.collectAsState()
-    val isVirtualizerEnabled by viewModel.isVirtualizerEnabled.collectAsState()
     val currentSpeed by viewModel.currentSpeed.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
@@ -93,7 +106,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ردیف اول افکت‌ها
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -108,27 +120,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 selected = isReverbEnabled,
                 onClick = { viewModel.toggleReverb() },
                 label = { Text("Reverb") },
-                modifier = Modifier.weight(1f)
-            )
-        }
-
-        Spacer(modifier = Modifier.height(12.dp))
-
-        // ردیف دوم افکت‌ها
-        Row(
-            horizontalArrangement = Arrangement.spacedBy(12.dp),
-            modifier = Modifier.fillMaxWidth()
-        ) {
-            FilterChip(
-                selected = isBassBoostEnabled,
-                onClick = { viewModel.toggleBassBoost() },
-                label = { Text("Bass Boost") },
-                modifier = Modifier.weight(1f)
-            )
-            FilterChip(
-                selected = isVirtualizerEnabled,
-                onClick = { viewModel.toggleVirtualizer() },
-                label = { Text("8D Audio") },
                 modifier = Modifier.weight(1f)
             )
         }
