@@ -10,11 +10,29 @@ import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.*
-import androidx.compose.runtime.*
+import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
+import androidx.compose.material3.Card
+import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilterChip
+import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Slider
+import androidx.compose.material3.Surface
+import androidx.compose.material3.Text
+import androidx.compose.runtime.Composable
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -47,6 +65,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val isReverbEnabled by viewModel.isReverbEnabled.collectAsState()
     val isBassBoostEnabled by viewModel.isBassBoostEnabled.collectAsState()
     val is8DEnabled by viewModel.is8DEnabled.collectAsState()
+    val isDynamicsEnabled by viewModel.isDynamicsEnabled.collectAsState()
     val currentSpeed by viewModel.currentSpeed.collectAsState()
     val currentPitch by viewModel.currentPitch.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
@@ -85,11 +104,13 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
+        // ─── عنوان ───
         Text(text = "RemixLab", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
+        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = { audioPicker.launch("audio/*") },
             modifier = Modifier.fillMaxWidth()
@@ -99,6 +120,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── پنل COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -108,6 +130,11 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     text = "🎛️ COMA AUDIO LAB",
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "پریست‌های آماده کمایی و تاریک",
+                    style = MaterialTheme.typography.bodySmall
                 )
                 Spacer(modifier = Modifier.height(12.dp))
 
@@ -139,6 +166,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── کنترل‌های دستی ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -175,6 +203,16 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── افکت‌ها ───
+        Text(
+            text = "افکت‌ها",
+            style = MaterialTheme.typography.titleMedium,
+            fontWeight = FontWeight.Bold,
+            modifier = Modifier.align(Alignment.Start)
+        )
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ردیف اول
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -195,6 +233,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(12.dp))
 
+        // ردیف دوم
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
             modifier = Modifier.fillMaxWidth()
@@ -213,8 +252,24 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             )
         }
 
+        Spacer(modifier = Modifier.height(12.dp))
+
+        // ردیف سوم: Dynamics (کیفیت استودیویی)
+        Row(
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+            modifier = Modifier.fillMaxWidth()
+        ) {
+            FilterChip(
+                selected = isDynamicsEnabled,
+                onClick = { viewModel.toggleDynamics() },
+                label = { Text("🎚️ استودیویی") },
+                modifier = Modifier.weight(1f)
+            )
+        }
+
         Spacer(modifier = Modifier.height(32.dp))
 
+        // ─── بخش ضبط ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -271,7 +326,10 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                         }
                     }
                 } else {
-                    Text(text = "برای ضبط، روی دکمه زیر بزن", style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = "برای ضبط، روی دکمه زیر بزن",
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
 
                 if (recordingError != null) {
@@ -318,9 +376,12 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
-            modifier = Modifier.fillMaxWidth().height(56.dp)
+            modifier = Modifier
+                .fillMaxWidth()
+                .height(56.dp)
         ) {
             Text(
                 text = if (isPlaying) "⏸ توقف" else "▶️ پخش",
@@ -356,9 +417,6 @@ private fun formatTime(seconds: Long): String {
     return "%02d:%02d".format(mins, secs)
 }
 
-/**
- * اشتراک‌گذاری فایل صوتی از طریق Uri (MediaStore)
- */
 private fun shareAudio(context: Context, uri: Uri) {
     try {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
@@ -372,9 +430,6 @@ private fun shareAudio(context: Context, uri: Uri) {
     }
 }
 
-/**
- * پخش فایل با پلیر پیش‌فرض دستگاه
- */
 private fun playAudio(context: Context, uri: Uri) {
     try {
         val playIntent = Intent(Intent.ACTION_VIEW).apply {
