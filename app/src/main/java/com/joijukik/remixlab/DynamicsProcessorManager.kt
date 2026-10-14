@@ -1,48 +1,53 @@
 package com.joijukik.remixlab
 
-import android.media.audiofx.DynamicsProcessing
-import android.media.audiofx.DynamicsProcessing.Config
-import android.media.audiofx.DynamicsProcessing.Limiter
-import android.media.audiofx.DynamicsProcessing.Mbc
-import android.media.audiofx.DynamicsProcessing.Eq
+import android.media.audiofx.LoudnessEnhancer
 
+/**
+ * مدیریت پردازش دینامیک صدا: تقویت بلندی (Loudness Enhancement)
+ * این کلاس کیفیت خروجی رو بالا می‌بره و صدا رو شفاف‌تر می‌کنه
+ */
 class DynamicsProcessorManager(audioSessionId: Int) {
 
-    private var dynamicsProcessor: DynamicsProcessing? = null
+    private var loudnessEnhancer: LoudnessEnhancer? = null
 
     init {
-        if (audioSessionId == 0 || audioSessionId == -1) return
-
-        try {
-            // پیکربندی با ۲ باند (استریو)
-            val config = Config.Builder(2) // ۲ کانال
-                .setInputGain(-2f) // کاهش ورودی برای جلوگیری از کلیپینگ
-                .setLimiterByChannelIndex(0, true)
-                .setLimiterByChannelIndex(1, true)
-                .build()
-
-            dynamicsProcessor = DynamicsProcessing(0, audioSessionId, config)
-            dynamicsProcessor?.enabled = false
-        } catch (e: Exception) {
-            e.printStackTrace()
-            dynamicsProcessor = null
+        if (audioSessionId != 0 && audioSessionId != -1) {
+            try {
+                loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
+                    setTargetGain(300)   // 3 dB تقویت
+                    enabled = false
+                }
+            } catch (e: Exception) {
+                e.printStackTrace()
+                loudnessEnhancer = null
+            }
         }
     }
 
     fun setEnabled(enabled: Boolean) {
-        dynamicsProcessor?.enabled = enabled
+        try {
+            loudnessEnhancer?.enabled = enabled
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
-    fun setInputGain(db: Float) {
+    /**
+     * تنظیم مقدار تقویت
+     * @param gainMillibels مقدار بین 0 تا 2000 (یعنی 0 تا 20 dB)
+     */
+    fun setGain(gainMillibels: Int) {
         try {
-            dynamicsProcessor?.setInputGain(db)
-        } catch (e: Exception) { }
+            loudnessEnhancer?.setTargetGain(gainMillibels.coerceIn(0, 2000))
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun release() {
         try {
-            dynamicsProcessor?.release()
+            loudnessEnhancer?.release()
         } catch (_: Exception) { }
-        dynamicsProcessor = null
+        loudnessEnhancer = null
     }
 }
