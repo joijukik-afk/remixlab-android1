@@ -27,10 +27,10 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((File) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // کیفیت بالاتر: 48kHz و 192 kbps
+    // کیفیت بالاتر: 48kHz و 256 kbps
     private val sampleRate = 48000
     private val channelCount = 2
-    private val bitRate = 192 * 1024
+    private val bitRate = 256 * 1024
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
@@ -104,8 +104,6 @@ class AudioExporter(private val context: Context) {
                     MediaCodecInfo.CodecProfileLevel.AACObjectLC
                 )
                 setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize)
-                // کیفیت بالاتر AAC
-                setInteger(MediaFormat.KEY_AAC_ENCODING_QUALITY, 100)
             }
 
             codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
