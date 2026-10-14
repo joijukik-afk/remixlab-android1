@@ -78,11 +78,11 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
-    // ─── درخواست مجوز READ_MEDIA_AUDIO (اندروید ۱۳+) ───
+    // ─── درخواست مجوز READ_MEDIA_AUDIO ───
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { isGranted ->
-        // مجوز داده یا رد شد - کاربر دوباره دکمه رو بزنه
+    ) { _ ->
+        // مجوز داده یا رد شد
     }
 
     // ─── انتخاب آهنگ ───
@@ -125,7 +125,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         // ─── دکمه انتخاب آهنگ (با درخواست مجوز) ───
         Button(
             onClick = {
-                // بررسی مجوز قبل از باز کردن پنجره انتخاب
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     Manifest.permission.READ_MEDIA_AUDIO
                 } else {
@@ -305,7 +304,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 horizontalAlignment = Alignment.CenterHorizontally
             ) {
                 Text(
-                    text = "💾 ذخیره ریمیکس",
+                    text = "💾 ذخیره ریمیکس (MP3)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
@@ -446,7 +445,7 @@ private fun formatTime(seconds: Long): String {
 private fun shareAudio(context: Context, uri: Uri) {
     try {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "audio/mp4"
+            type = "audio/mpeg"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -459,7 +458,7 @@ private fun shareAudio(context: Context, uri: Uri) {
 private fun playAudio(context: Context, uri: Uri) {
     try {
         val playIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "audio/mp4")
+            setDataAndType(uri, "audio/mpeg")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(playIntent, "پخش ریمیکس"))
