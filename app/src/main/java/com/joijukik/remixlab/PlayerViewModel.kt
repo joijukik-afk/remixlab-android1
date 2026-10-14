@@ -101,7 +101,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         })
 
-        // کالبک‌های ضبط
         audioExporter.onProgress = { bytes ->
             _recordingSeconds.value = bytes / (48000L * 4L)
         }
@@ -197,14 +196,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
     }
 
-    // --- اعمال پریست COMA ---
+    // --- اعمال پریست COMA (با پشتیبانی از افکت محیطی) ---
 
     fun applyComaPreset(preset: ComaPreset) {
+        // ۱. سرعت
         _currentSpeed.value = preset.speed
         _isSlowed.value = preset.speed < 1.0f
+
+        // ۲. گام
         _currentPitch.value = preset.pitch
         applyPlaybackParameters()
 
+        // ۳. Reverb
         if (preset.reverbPreset != null) {
             _isReverbEnabled.value = true
             _currentReverbPreset.value = preset.reverbPreset
@@ -214,22 +217,32 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             effectsManager?.setReverbEnabled(false)
         }
 
+        // ۴. Bass Boost
         _isBassBoostEnabled.value = preset.bassBoost
         effectsManager?.setBassBoostEnabled(preset.bassBoost)
 
+        // ۵. 8D
         _is8DEnabled.value = preset.virtualizer
         effectsManager?.setVirtualizerEnabled(preset.virtualizer)
+
+        // ۶. افکت محیطی
+        ambientManager.stop()
+        if (preset.ambientSound != null) {
+            _ambientVolume.value = preset.ambientVolume
+            ambientManager.play(preset.ambientSound, preset.ambientVolume)
+            _activeAmbient.value = preset.ambientSound
+        } else {
+            _activeAmbient.value = null
+        }
     }
 
-    // --- افکت‌های محیطی ---
+    // --- افکت‌های محیطی (دستی) ---
 
     fun toggleAmbient(type: AmbientSoundManager.SoundType) {
         if (_activeAmbient.value == type) {
-            // اگه همین فعاله، خاموش کن
             ambientManager.stop()
             _activeAmbient.value = null
         } else {
-            // یه افکت جدید روشن کن
             ambientManager.play(type, _ambientVolume.value)
             _activeAmbient.value = type
         }
