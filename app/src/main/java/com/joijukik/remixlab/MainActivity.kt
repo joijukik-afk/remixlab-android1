@@ -53,7 +53,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
     val isRecording by viewModel.isRecording.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
-    val lastSavedFile by viewModel.lastSavedFile.collectAsState()
+    val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
     val audioPicker = rememberLauncherForActivityResult(
@@ -65,7 +65,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    // 🔑 نکته کلیدی: اول سرویس رو استارت کن، بعد درخواست MediaProjection بده
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -86,18 +85,9 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        Text(
-            text = "RemixLab",
-            style = MaterialTheme.typography.headlineLarge
-        )
-
+        Text(text = "RemixLab", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
-
-        Text(
-            text = "ریمیکس حرفه‌ای آهنگ‌های شما",
-            style = MaterialTheme.typography.bodyMedium
-        )
-
+        Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
         Button(
@@ -111,9 +101,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -121,12 +109,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     style = MaterialTheme.typography.titleLarge,
                     fontWeight = FontWeight.Bold
                 )
-                Spacer(modifier = Modifier.height(4.dp))
-                Text(
-                    text = "پریست‌های آماده کمایی و تاریک",
-                    style = MaterialTheme.typography.bodySmall
-                )
-
                 Spacer(modifier = Modifier.height(12.dp))
 
                 val presets = ComaPresets.all
@@ -159,9 +141,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.surfaceVariant
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
                 Text(
@@ -169,13 +149,9 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
                 )
-
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text(
-                    text = "سرعت: ${"%.2f".format(currentSpeed)}x",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "سرعت: ${"%.2f".format(currentSpeed)}x", style = MaterialTheme.typography.bodyMedium)
                 Slider(
                     value = currentSpeed,
                     onValueChange = { viewModel.setCustomSpeed(it) },
@@ -186,10 +162,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Text(
-                    text = "گام: ${"%.2f".format(currentPitch)}x",
-                    style = MaterialTheme.typography.bodyMedium
-                )
+                Text(text = "گام: ${"%.2f".format(currentPitch)}x", style = MaterialTheme.typography.bodyMedium)
                 Slider(
                     value = currentPitch,
                     onValueChange = { viewModel.setPitch(it) },
@@ -201,15 +174,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         }
 
         Spacer(modifier = Modifier.height(24.dp))
-
-        Text(
-            text = "افکت‌ها",
-            style = MaterialTheme.typography.titleMedium,
-            fontWeight = FontWeight.Bold,
-            modifier = Modifier.align(Alignment.Start)
-        )
-
-        Spacer(modifier = Modifier.height(12.dp))
 
         Row(
             horizontalArrangement = Arrangement.spacedBy(12.dp),
@@ -251,14 +215,9 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ============================================
-        // بخش ضبط (Export)
-        // ============================================
         Card(
             modifier = Modifier.fillMaxWidth(),
-            colors = CardDefaults.cardColors(
-                containerColor = MaterialTheme.colorScheme.primaryContainer
-            )
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
         ) {
             Column(
                 modifier = Modifier.padding(16.dp),
@@ -279,7 +238,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                         color = MaterialTheme.colorScheme.error,
                         fontWeight = FontWeight.Bold
                     )
-                } else if (lastSavedFile != null) {
+                } else if (lastSavedUri != null) {
                     Text(
                         text = "✅ ذخیره شد!",
                         style = MaterialTheme.typography.bodyLarge,
@@ -288,14 +247,31 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     )
                     Spacer(modifier = Modifier.height(4.dp))
                     Text(
-                        text = lastSavedFile!!.name,
+                        text = "پوشه Music/RemixLab",
                         style = MaterialTheme.typography.bodySmall
                     )
+
+                    Spacer(modifier = Modifier.height(12.dp))
+
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = { shareAudio(context, lastSavedUri!!) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("📤 اشتراک‌گذاری")
+                        }
+                        Button(
+                            onClick = { playAudio(context, lastSavedUri!!) },
+                            modifier = Modifier.weight(1f)
+                        ) {
+                            Text("▶️ پخش")
+                        }
+                    }
                 } else {
-                    Text(
-                        text = "برای ضبط، روی دکمه زیر بزن",
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(text = "برای ضبط، روی دکمه زیر بزن", style = MaterialTheme.typography.bodySmall)
                 }
 
                 if (recordingError != null) {
@@ -315,21 +291,13 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                             viewModel.stopRecording()
                         } else {
                             viewModel.clearRecordingError()
-
-                            // 🔑 مراحل کلیدی برای اندروید ۱۴:
-                            // ۱. اول سرویس رو استارت کن
                             val serviceIntent = Intent(context, MediaProjectionService::class.java)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
                             } else {
                                 context.startService(serviceIntent)
                             }
-
-                            // ۲. بعد از یک تاخیر کوتاه، درخواست MediaProjection بده
-                            // (کد درخواست در کالبک projectionLauncher انجام می‌شود)
-                            projectionLauncher.launch(
-                                projectionManager.createScreenCaptureIntent()
-                            )
+                            projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
@@ -352,9 +320,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Button(
             onClick = { viewModel.playPause() },
-            modifier = Modifier
-                .fillMaxWidth()
-                .height(56.dp)
+            modifier = Modifier.fillMaxWidth().height(56.dp)
         ) {
             Text(
                 text = if (isPlaying) "⏸ توقف" else "▶️ پخش",
@@ -372,22 +338,14 @@ fun PresetButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier
 ) {
-    Button(
-        onClick = onClick,
-        modifier = modifier.height(64.dp)
-    ) {
-        Column(
-            horizontalAlignment = Alignment.CenterHorizontally
-        ) {
+    Button(onClick = onClick, modifier = modifier.height(64.dp)) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Text(
                 text = preset.name,
                 style = MaterialTheme.typography.bodyMedium,
                 fontWeight = FontWeight.Bold
             )
-            Text(
-                text = preset.description,
-                style = MaterialTheme.typography.bodySmall
-            )
+            Text(text = preset.description, style = MaterialTheme.typography.bodySmall)
         }
     }
 }
@@ -396,4 +354,35 @@ private fun formatTime(seconds: Long): String {
     val mins = seconds / 60
     val secs = seconds % 60
     return "%02d:%02d".format(mins, secs)
+}
+
+/**
+ * اشتراک‌گذاری فایل صوتی از طریق Uri (MediaStore)
+ */
+private fun shareAudio(context: Context, uri: Uri) {
+    try {
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "audio/mp4"
+            putExtra(Intent.EXTRA_STREAM, uri)
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(shareIntent, "اشتراک‌گذاری ریمیکس"))
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
+}
+
+/**
+ * پخش فایل با پلیر پیش‌فرض دستگاه
+ */
+private fun playAudio(context: Context, uri: Uri) {
+    try {
+        val playIntent = Intent(Intent.ACTION_VIEW).apply {
+            setDataAndType(uri, "audio/mp4")
+            addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+        }
+        context.startActivity(Intent.createChooser(playIntent, "پخش ریمیکس"))
+    } catch (e: Exception) {
+        e.printStackTrace()
+    }
 }
