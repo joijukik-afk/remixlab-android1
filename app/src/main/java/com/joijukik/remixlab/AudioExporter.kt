@@ -17,7 +17,6 @@ import android.os.Environment
 import android.provider.MediaStore
 import java.io.File
 import java.io.FileInputStream
-import java.io.OutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -29,12 +28,12 @@ class AudioExporter(private val context: Context) {
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
     private var outputFile: File? = null
-    private var outputUri: Uri? = null
 
     var onProgress: ((Long) -> Unit)? = null
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
+    // نرخ نمونه‌برداری استودیویی
     private val sampleRate = 48000
     private val channelCount = 2
     private val bitRate = 256 * 1024
@@ -47,9 +46,11 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            val bufferSize = AudioRecord.getMinBufferSize(
+            // 🔑 بافر بزرگ‌تر برای حذف خش صدا (Underrun)
+            val minBufferSize = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
-            ).coerceAtLeast(sampleRate * 2)
+            )
+            val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate)
 
             val record = AudioRecord.Builder()
                 .setAudioFormat(
@@ -176,6 +177,7 @@ class AudioExporter(private val context: Context) {
                 onProgress?.invoke(totalBytesRead)
             }
 
+            // Flush نهایی
             val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
             if (inputBufferIndex >= 0) {
                 codec.queueInputBuffer(
@@ -208,7 +210,7 @@ class AudioExporter(private val context: Context) {
             try { record.release() } catch (_: Exception) {}
             audioRecord = null
 
-            // حالا فایل رو از temp به MediaStore منتقل کن
+            // ذخیره در MediaStore (پوشه Music/RemixLab)
             saveToMediaStore(file)
 
         } catch (e: Exception) {
@@ -228,9 +230,6 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    /**
-     * ذخیره فایل temp توی MediaStore (پوشه Music/RemixLab)
-     */
     private fun saveToMediaStore(tempFile: File) {
         try {
             val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
@@ -262,17 +261,13 @@ class AudioExporter(private val context: Context) {
                 return
             }
 
-            // کپی محتوای فایل temp به MediaStore
             context.contentResolver.openOutputStream(uri)?.use { outputStream ->
                 FileInputStream(tempFile).use { inputStream ->
                     inputStream.copyTo(outputStream)
                 }
             }
 
-            // حذف فایل temp
             tempFile.delete()
-
-            outputUri = uri
             onFinish?.invoke(uri)
 
         } catch (e: Exception) {
