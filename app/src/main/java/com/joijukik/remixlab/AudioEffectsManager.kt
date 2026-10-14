@@ -13,52 +13,65 @@ class AudioEffectsManager(audioSessionId: Int) {
     private var reverb: PresetReverb? = null
 
     init {
-        try {
-            equalizer = Equalizer(0, audioSessionId).apply { enabled = false }
-        } catch (e: Exception) {
-            e.printStackTrace()
-            equalizer = null
+        // اگه session ID معتبر نیست، کاری نکن
+        if (audioSessionId == 0 || audioSessionId == -1) {
+            return
         }
 
-        try {
-            bassBoost = BassBoost(0, audioSessionId).apply { enabled = false }
+        equalizer = try {
+            Equalizer(0, audioSessionId).apply { enabled = false }
         } catch (e: Exception) {
             e.printStackTrace()
-            bassBoost = null
+            null
         }
 
-        try {
-            virtualizer = Virtualizer(0, audioSessionId).apply { enabled = false }
+        bassBoost = try {
+            BassBoost(0, audioSessionId).apply { enabled = false }
         } catch (e: Exception) {
             e.printStackTrace()
-            virtualizer = null
+            null
         }
 
-        try {
-            reverb = PresetReverb(0, audioSessionId).apply { enabled = false }
+        virtualizer = try {
+            Virtualizer(0, audioSessionId).apply { enabled = false }
         } catch (e: Exception) {
             e.printStackTrace()
-            reverb = null
+            null
+        }
+
+        reverb = try {
+            PresetReverb(0, audioSessionId).apply { enabled = false }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            null
         }
     }
 
-    // --- Reverb (طنین) ---
+    // --- Reverb ---
 
     fun setReverbEnabled(enabled: Boolean, preset: Short = PresetReverb.PRESET_LARGEHALL) {
         val r = reverb ?: return
-        r.enabled = enabled
-        if (enabled) {
-            r.preset = preset
+        try {
+            r.enabled = enabled
+            if (enabled) {
+                r.preset = preset
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
-    // --- Bass Boost (تقویت باس) ---
+    // --- Bass Boost ---
 
     fun setBassBoostEnabled(enabled: Boolean) {
         val b = bassBoost ?: return
-        b.enabled = enabled
-        if (enabled) {
-            b.setStrength(1000.toShort())
+        try {
+            b.enabled = enabled
+            if (enabled) {
+                b.setStrength(1000.toShort())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
@@ -66,16 +79,24 @@ class AudioEffectsManager(audioSessionId: Int) {
 
     fun setVirtualizerEnabled(enabled: Boolean) {
         val v = virtualizer ?: return
-        v.enabled = enabled
-        if (enabled) {
-            v.setStrength(1000.toShort())
+        try {
+            v.enabled = enabled
+            if (enabled) {
+                v.setStrength(1000.toShort())
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
         }
     }
 
-    // --- Equalizer (اکولایزر) ---
+    // --- Equalizer ---
 
     fun setEqualizerEnabled(enabled: Boolean) {
-        equalizer?.enabled = enabled
+        try {
+            equalizer?.enabled = enabled
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
     }
 
     fun setEqualizerBandLevel(bandIndex: Int, level: Short) {
@@ -89,10 +110,10 @@ class AudioEffectsManager(audioSessionId: Int) {
     // --- آزادسازی منابع ---
 
     fun release() {
-        try { equalizer?.release() } catch (e: Exception) { }
-        try { bassBoost?.release() } catch (e: Exception) { }
-        try { virtualizer?.release() } catch (e: Exception) { }
-        try { reverb?.release() } catch (e: Exception) { }
+        try { equalizer?.release() } catch (_: Exception) { }
+        try { bassBoost?.release() } catch (_: Exception) { }
+        try { virtualizer?.release() } catch (_: Exception) { }
+        try { reverb?.release() } catch (_: Exception) { }
 
         equalizer = null
         bassBoost = null
