@@ -8,6 +8,8 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -77,7 +79,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val currentPitch by viewModel.currentPitch.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
-    // ─── State های جدید ───
     val songName by viewModel.songName.collectAsState()
     val currentPosition by viewModel.currentPosition.collectAsState()
     val duration by viewModel.duration.collectAsState()
@@ -104,6 +105,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
+    // 🎯 حالا پس از برگشت نتیجه، سرویس رو متوقف می‌کنیم
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -112,6 +114,10 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 result.resultCode, result.data!!
             )
             viewModel.startRecording(projection)
+        } else {
+            // اگه کاربر لغو کرد، سرویس رو ببند
+            val stopIntent = Intent(context, MediaProjectionService::class.java)
+            context.stopService(stopIntent)
         }
     }
 
@@ -155,7 +161,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ─── نمایش اسم آهنگ ───
+        // ─── نمایش اسم آهنگ و نوار پیشرفت ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -176,7 +182,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ─── نوار پیشرفت ───
                 val positionSec = currentPosition / 1000
                 val durationSec = duration / 1000
 
@@ -191,14 +196,8 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(
-                        text = formatTime(positionSec),
-                        style = MaterialTheme.typography.bodySmall
-                    )
-                    Text(
-                        text = formatTime(durationSec),
-                        style = MaterialTheme.typography.bodySmall
-                    )
+                    Text(text = formatTime(positionSec), style = MaterialTheme.typography.bodySmall)
+                    Text(text = formatTime(durationSec), style = MaterialTheme.typography.bodySmall)
                 }
             }
         }
@@ -448,7 +447,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // ─── انتخاب کیفیت ───
                 Text(
                     text = "کیفیت: ${exportQuality} kbps",
                     style = MaterialTheme.typography.bodyMedium,
@@ -530,19 +528,28 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
+                // 🎯 دکمه شروع ضبط با ترتیب صحیح
                 Button(
                     onClick = {
                         if (isRecording) {
                             viewModel.stopRecording()
                         } else {
                             viewModel.clearRecordingError()
+
+                            // قدم ۱: اول سرویس رو شروع کن
                             val serviceIntent = Intent(context, MediaProjectionService::class.java)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
                             } else {
                                 context.startService(serviceIntent)
                             }
-                            projectionLauncher.launch(projectionManager.createScreenCaptureIntent())
+
+                            // قدم ۲: نیم ثانیه صبر کن، بعد دیالوگ رو نشون بده
+                            Handler(Looper.getMainLooper()).postDelayed({
+                                projectionLauncher.launch(
+                                    projectionManager.createScreenCaptureIntent()
+                                )
+                            }, 500)
                         }
                     },
                     modifier = Modifier.fillMaxWidth(),
