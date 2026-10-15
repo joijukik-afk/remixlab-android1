@@ -6,131 +6,103 @@ data class ComaPreset(
     val id: String,
     val name: String,
     val description: String,
-    val speed: Float,
-    val pitch: Float,
-    val reverbPreset: Short?,
-    val bassBoost: Boolean,
-    val virtualizer: Boolean,
+    val speed: Float = 1.0f,
+    val pitch: Float = 1.0f,
+    val reverbPreset: Short? = null,
+    val reverbStrength: Float = 0.5f,
+    val bassBoost: Boolean = false,
+    val virtualizer: Boolean = false,
+    val dynamics: Boolean = false,
     val ambientSound: AmbientSoundManager.SoundType? = null,
-    val ambientVolume: Float = 0.35f
+    val ambientVolume: Float = 0.4f
 )
 
 object ComaPresets {
-
-    val all: List<ComaPreset> = listOf(
+    val all = listOf(
         ComaPreset(
-            id = "slowed_reverb",
-            name = "Slowed + Reverb",
-            description = "کند و طنین‌دار",
-            speed = 0.82f,
+            id = "coma_classic",
+            name = "COMA Classic",
+            description = "تجربه کلاسیک",
+            speed = 0.85f,
             pitch = 1.0f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = false,
-            virtualizer = false
+            reverbPreset = PresetReverb.PRESET_LARGEROOM,
+            reverbStrength = 0.6f,
+            bassBoost = true
         ),
         ComaPreset(
-            id = "deep_coma",
-            name = "Deep Coma",
-            description = "کمای عمیق و سنگین",
-            speed = 0.65f,
-            pitch = 0.92f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = true,
-            virtualizer = false,
-            ambientSound = AmbientSoundManager.SoundType.RAIN,
-            ambientVolume = 0.25f
-        ),
-        ComaPreset(
-            id = "half_asleep",
-            name = "Half-Asleep",
-            description = "نیمه‌خواب و دور",
-            speed = 0.80f,
-            pitch = 0.95f,
-            reverbPreset = PresetReverb.PRESET_MEDIUMHALL,
-            bassBoost = false,
-            virtualizer = false
-        ),
-        ComaPreset(
-            id = "dark_dreamcore",
-            name = "Dark Dreamcore",
-            description = "دریم‌کور تاریک",
-            speed = 0.72f,
-            pitch = 0.98f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = false,
-            virtualizer = true,
-            ambientSound = AmbientSoundManager.SoundType.WIND,
-            ambientVolume = 0.3f
-        ),
-        ComaPreset(
-            id = "broken_tape",
-            name = "Broken Tape",
-            description = "نوار خراب آنالوگ",
-            speed = 0.88f,
-            pitch = 0.96f,
-            reverbPreset = PresetReverb.PRESET_MEDIUMROOM,
-            bassBoost = false,
-            virtualizer = false,
-            ambientSound = AmbientSoundManager.SoundType.NOISE,
-            ambientVolume = 0.2f
-        ),
-        ComaPreset(
-            id = "underwater_echo",
-            name = "Underwater Echo",
-            description = "اکوی زیر آب",
-            speed = 0.83f,
-            pitch = 0.94f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = true,
-            virtualizer = false
-        ),
-        ComaPreset(
-            id = "heartbeat_dark",
-            name = "Heartbeat in Dark",
-            description = "ضربان در تاریکی",
-            speed = 0.78f,
-            pitch = 1.0f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = true,
-            virtualizer = false,
-            ambientSound = AmbientSoundManager.SoundType.THUNDER,
-            ambientVolume = 0.15f
-        ),
-        ComaPreset(
-            id = "cinematic_outro",
-            name = "Cinematic Outro",
-            description = "پایان سینمایی",
-            speed = 0.90f,
-            pitch = 1.0f,
-            reverbPreset = PresetReverb.PRESET_MEDIUMHALL,
-            bassBoost = false,
-            virtualizer = false,
-            ambientSound = AmbientSoundManager.SoundType.RAIN,
-            ambientVolume = 0.15f
-        ),
-        ComaPreset(
-            id = "midnight_rain",
-            name = "Midnight Rain",
-            description = "باران نیمه‌شب",
+            id = "coma_dream",
+            name = "COMA Dream",
+            description = "رویایی و آرام",
             speed = 0.75f,
-            pitch = 0.96f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = true,
+            pitch = 0.95f,
+            reverbPreset = PresetReverb.PRESET_PLATE,
+            reverbStrength = 0.8f,
             virtualizer = true,
-            ambientSound = AmbientSoundManager.SoundType.HEAVY_RAIN,
+            ambientSound = AmbientSoundManager.SoundType.RAIN,
             ambientVolume = 0.35f
         ),
         ComaPreset(
-            id = "faded_memory",
-            name = "Faded Memory",
-            description = "خاطره محو شده",
-            speed = 0.70f,
-            pitch = 0.90f,
-            reverbPreset = PresetReverb.PRESET_LARGEHALL,
-            bassBoost = false,
-            virtualizer = true,
+            id = "coma_night",
+            name = "COMA Night",
+            description = "شب‌های آرام",
+            speed = 0.8f,
+            pitch = 0.9f,
+            reverbPreset = PresetReverb.PRESET_LARGEROOM,
+            reverbStrength = 0.7f,
+            ambientSound = AmbientSoundManager.SoundType.THUNDER,
+            ambientVolume = 0.3f
+        ),
+        ComaPreset(
+            id = "coma_deep",
+            name = "COMA Deep",
+            description = "بیس عمیق",
+            speed = 0.7f,
+            pitch = 0.85f,
+            reverbPreset = PresetReverb.PRESET_LARGEROOM,
+            reverbStrength = 0.9f,
+            bassBoost = true,
+            dynamics = true,
             ambientSound = AmbientSoundManager.SoundType.WIND,
             ambientVolume = 0.25f
+        ),
+        ComaPreset(
+            id = "coma_8d",
+            name = "COMA 8D",
+            description = "چرخش ۸ بعدی",
+            speed = 1.0f,
+            pitch = 1.0f,
+            virtualizer = true,
+            reverbPreset = PresetReverb.PRESET_MEDIUMROOM,
+            reverbStrength = 0.5f
+        ),
+        ComaPreset(
+            id = "coma_slowed",
+            name = "COMA Slowed",
+            description = "کلاسیک Slowed",
+            speed = 0.85f,
+            pitch = 0.95f,
+            reverbPreset = PresetReverb.PRESET_PLATE,
+            reverbStrength = 0.75f
+        ),
+        ComaPreset(
+            id = "coma_nightcore",
+            name = "COMA Nightcore",
+            description = "تند و روشن",
+            speed = 1.25f,
+            pitch = 1.15f,
+            reverbPreset = PresetReverb.PRESET_SMALLROOM,
+            reverbStrength = 0.3f
+        ),
+        ComaPreset(
+            id = "coma_cafe",
+            name = "COMA Café",
+            description = "حس کافه دنج",
+            speed = 0.9f,
+            pitch = 1.0f,
+            reverbPreset = PresetReverb.PRESET_MEDIUMROOM,
+            reverbStrength = 0.4f,
+            ambientSound = AmbientSoundManager.SoundType.FOREST,
+            ambientVolume = 0.3f
         )
     )
 }
