@@ -31,7 +31,7 @@ class AudioExporter(private val context: Context) {
     private var outputFile: File? = null
     private var androidLame: AndroidLame? = null
 
-    var onProgress: ((Long) -> Unit)? = null  // اینجا ثانیه‌ها رو می‌فرستیم
+    var onProgress: ((Long) -> Unit)? = null
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
@@ -43,6 +43,17 @@ class AudioExporter(private val context: Context) {
     private var startTimeMs: Long = 0
     private var pausedDurationMs: Long = 0
     private var pauseStartMs: Long = 0
+
+    // 🎯 متادیتا
+    private var customFileName: String = ""
+    private var customTitle: String = ""
+    private var customArtist: String = "RemixLab"
+
+    fun setMetadata(fileName: String, title: String, artist: String) {
+        customFileName = fileName
+        customTitle = title
+        customArtist = artist
+    }
 
     fun startRecording(
         mediaProjection: MediaProjection,
@@ -84,7 +95,6 @@ class AudioExporter(private val context: Context) {
             isRecording = true
             isPaused = false
 
-            // 🎯 ذخیره زمان شروع
             startTimeMs = SystemClock.elapsedRealtime()
             pausedDurationMs = 0
             pauseStartMs = 0
@@ -116,7 +126,6 @@ class AudioExporter(private val context: Context) {
         if (!isRecording || !isPaused) return
         try {
             audioRecord?.startRecording()
-            // 🎯 محاسبه زمان توقف
             if (pauseStartMs > 0) {
                 pausedDurationMs += SystemClock.elapsedRealtime() - pauseStartMs
                 pauseStartMs = 0
@@ -170,20 +179,14 @@ class AudioExporter(private val context: Context) {
                     }
 
                     val bytesEncoded = androidLame?.encode(
-                        leftChannel,
-                        rightChannel,
-                        samplesPerChannel,
-                        mp3Buffer
+                        leftChannel, rightChannel, samplesPerChannel, mp3Buffer
                     ) ?: 0
 
                     if (bytesEncoded > 0) {
                         outputStream.write(mp3Buffer, 0, bytesEncoded)
-
-                        // 🎯 محاسبه زمان واقعی (ثانیه)
                         val now = SystemClock.elapsedRealtime()
                         val totalPausedMs = pausedDurationMs +
-                                (if (isPaused && pauseStartMs > 0)
-                                    (now - pauseStartMs) else 0)
+                                (if (isPaused && pauseStartMs > 0) (now - pauseStartMs) else 0)
                         val elapsedSeconds = (now - startTimeMs - totalPausedMs) / 1000
                         onProgress?.invoke(elapsedSeconds)
                     }
@@ -204,17 +207,31 @@ class AudioExporter(private val context: Context) {
     }
 
     private fun saveMp3ToMediaStore(mp3File: File) {
+        // 🎯 استفاده از نام سفارشی یا نام پیش‌فرض
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "RemixLab_$timestamp.mp3"
+        val fileName = if (customFileName.isNotBlank()) {
+            if (customFileName.endsWith(".mp3")) customFileName
+            else "$customFileName.mp3"
+        } else {
+            "RemixLab_$timestamp.mp3"
+        }
+
+        val title = if (customTitle.isNotBlank()) customTitle
+        else fileName.removeSuffix(".mp3")
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
+            // 🎯 اضافه کردن متادیتا
+            put(MediaStore.Audio.Media.TITLE, title)
+            put(MediaStore.Audio.Media.ARTIST, customArtist)
+            put(MediaStore.Audio.Media.ALBUM, "RemixLab")
+            put(MediaStore.Audio.Media.IS_MUSIC, 1)
             put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
             put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
-            put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/RemixLab")
+                // 🎯 IS_PENDING = 1 یعنی فایل در حال نوشتنه و بقیه اپ‌ها نبیننش
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }
