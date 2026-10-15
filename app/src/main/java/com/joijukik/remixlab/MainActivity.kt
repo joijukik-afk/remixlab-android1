@@ -29,12 +29,16 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Slider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.remember
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
@@ -78,21 +82,23 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
-    // ─── درخواست مجوز READ_MEDIA_AUDIO ───
+    // State های AI
+    var aiPrompt by remember { mutableStateOf("") }
+    var aiResult by remember { mutableStateOf<AiTuningAssistant.TuningResult?>(null) }
+
+    // درخواست مجوز
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
-    ) { _ ->
-        // مجوز داده یا رد شد
-    }
+    ) { _ -> }
 
-    // ─── انتخاب آهنگ ───
+    // انتخاب آهنگ
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
     }
 
-    // ─── درخواست MediaProjection ───
+    // درخواست MediaProjection
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
@@ -116,13 +122,13 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ─── عنوان ───
+        // عنوان
         Text(text = "RemixLab", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── دکمه انتخاب آهنگ ───
+        // دکمه انتخاب آهنگ
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -144,6 +150,86 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             modifier = Modifier.fillMaxWidth()
         ) {
             Text("🎵 انتخاب آهنگ")
+        }
+
+        Spacer(modifier = Modifier.height(24.dp))
+
+        // ─── پنل دستیار AI ───
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.tertiaryContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "🤖 دستیار هوشمند",
+                    style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = "بنویس چی می‌خوای، خودم تنظیم می‌کنم",
+                    style = MaterialTheme.typography.bodySmall
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                OutlinedTextField(
+                    value = aiPrompt,
+                    onValueChange = { aiPrompt = it },
+                    label = { Text("مثلاً: کمایی و کند کن، بارون پخش کن") },
+                    modifier = Modifier.fillMaxWidth(),
+                    maxLines = 3
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                Button(
+                    onClick = {
+                        if (aiPrompt.isNotBlank()) {
+                            val result = AiTuningAssistant.analyzeRequest(aiPrompt)
+                            aiResult = result
+                            viewModel.applyAiTuning(result)
+                        }
+                    },
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Text("✨ اعمال با AI")
+                }
+
+                if (aiResult != null) {
+                    Spacer(modifier = Modifier.height(12.dp))
+                    Card(
+                        colors = CardDefaults.cardColors(
+                            containerColor = MaterialTheme.colorScheme.surface
+                        )
+                    ) {
+                        Column(modifier = Modifier.padding(12.dp)) {
+                            Text(
+                                text = "✅ تنظیمات اعمال شد:",
+                                style = MaterialTheme.typography.bodyMedium,
+                                fontWeight = FontWeight.Bold
+                            )
+                            if (aiResult!!.detectedKeywords.isNotEmpty()) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "کلمات شناسایی شده: ${aiResult!!.detectedKeywords.joinToString("، ")}",
+                                    style = MaterialTheme.typography.bodySmall
+                                )
+                            }
+                            if (aiResult!!.suggestedPreset != null) {
+                                Spacer(modifier = Modifier.height(4.dp))
+                                Text(
+                                    text = "🎛️ پریست پیشنهادی: ${aiResult!!.suggestedPreset}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.primary
+                                )
+                            }
+                        }
+                    }
+                }
+            }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
@@ -294,7 +380,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── بخش ضبط MP3 ───
+        // ─── بخش ضبط ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -401,7 +487,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── دکمه پخش/توقف ───
+        // دکمه پخش/توقف
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
@@ -442,11 +528,10 @@ private fun formatTime(seconds: Long): String {
     return "%02d:%02d".format(mins, secs)
 }
 
-// 🔑 اشتراک‌گذاری فایل MP3
 private fun shareAudio(context: Context, uri: Uri) {
     try {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "audio/mpeg" // 👈 MP3 MIME type
+            type = "audio/mpeg"
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -456,11 +541,10 @@ private fun shareAudio(context: Context, uri: Uri) {
     }
 }
 
-// 🔑 پخش فایل MP3
 private fun playAudio(context: Context, uri: Uri) {
     try {
         val playIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "audio/mpeg") // 👈 MP3 MIME type
+            setDataAndType(uri, "audio/mpeg")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(playIntent, "پخش ریمیکس"))
