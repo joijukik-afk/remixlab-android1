@@ -32,7 +32,6 @@ class MediaProjectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = buildNotification()
 
-        // 🎯 مهم: نوع سرویس foreground رو mediaProjection اعلام می‌کنیم
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
