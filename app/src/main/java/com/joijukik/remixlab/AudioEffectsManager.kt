@@ -13,7 +13,6 @@ class AudioEffectsManager(audioSessionId: Int) {
     private var reverb: PresetReverb? = null
 
     init {
-        // اگه session ID معتبر نیست، افکت‌ها رو نمی‌سازیم
         if (audioSessionId != 0 && audioSessionId != -1) {
             equalizer = try {
                 Equalizer(0, audioSessionId).apply { enabled = false }
@@ -45,8 +44,6 @@ class AudioEffectsManager(audioSessionId: Int) {
         }
     }
 
-    // --- Reverb ---
-
     fun setReverbEnabled(enabled: Boolean, preset: Short = PresetReverb.PRESET_LARGEHALL) {
         val r = reverb ?: return
         try {
@@ -58,8 +55,6 @@ class AudioEffectsManager(audioSessionId: Int) {
             e.printStackTrace()
         }
     }
-
-    // --- Bass Boost ---
 
     fun setBassBoostEnabled(enabled: Boolean) {
         val b = bassBoost ?: return
@@ -73,8 +68,6 @@ class AudioEffectsManager(audioSessionId: Int) {
         }
     }
 
-    // --- Virtualizer (8D Audio) ---
-
     fun setVirtualizerEnabled(enabled: Boolean) {
         val v = virtualizer ?: return
         try {
@@ -86,8 +79,6 @@ class AudioEffectsManager(audioSessionId: Int) {
             e.printStackTrace()
         }
     }
-
-    // --- Equalizer ---
 
     fun setEqualizerEnabled(enabled: Boolean) {
         try {
@@ -104,8 +95,6 @@ class AudioEffectsManager(audioSessionId: Int) {
             e.printStackTrace()
         }
     }
-
-    // --- آزادسازی منابع ---
 
     fun release() {
         try { equalizer?.release() } catch (_: Exception) { }
