@@ -77,28 +77,30 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val currentPitch by viewModel.currentPitch.collectAsState()
     val isPlaying by viewModel.isPlaying.collectAsState()
 
+    // ─── State های جدید ───
+    val songName by viewModel.songName.collectAsState()
+    val currentPosition by viewModel.currentPosition.collectAsState()
+    val duration by viewModel.duration.collectAsState()
+    val exportQuality by viewModel.exportQuality.collectAsState()
+
     val isRecording by viewModel.isRecording.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
-    // State های AI
     var aiPrompt by remember { mutableStateOf("") }
     var aiResult by remember { mutableStateOf<AiTuningAssistant.TuningResult?>(null) }
 
-    // درخواست مجوز
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ -> }
 
-    // انتخاب آهنگ
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
     }
 
-    // درخواست MediaProjection
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
@@ -122,13 +124,12 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // عنوان
         Text(text = "RemixLab", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // دکمه انتخاب آهنگ
+        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -152,9 +153,59 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             Text("🎵 انتخاب آهنگ")
         }
 
+        Spacer(modifier = Modifier.height(16.dp))
+
+        // ─── نمایش اسم آهنگ ───
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "🎶 در حال پخش:",
+                    style = MaterialTheme.typography.bodySmall
+                )
+                Spacer(modifier = Modifier.height(4.dp))
+                Text(
+                    text = songName,
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ─── نوار پیشرفت ───
+                val positionSec = currentPosition / 1000
+                val durationSec = duration / 1000
+
+                Slider(
+                    value = if (duration > 0) currentPosition.toFloat() else 0f,
+                    onValueChange = { viewModel.seekTo(it.toLong()) },
+                    valueRange = 0f..(duration.coerceAtLeast(1).toFloat()),
+                    modifier = Modifier.fillMaxWidth()
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text(
+                        text = formatTime(positionSec),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = formatTime(durationSec),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                }
+            }
+        }
+
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── پنل دستیار AI ───
+        // ─── پنل AI ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -234,7 +285,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── پنل COMA AUDIO LAB ───
+        // ─── COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -395,7 +446,32 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     fontWeight = FontWeight.Bold
                 )
 
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // ─── انتخاب کیفیت ───
+                Text(
+                    text = "کیفیت: ${exportQuality} kbps",
+                    style = MaterialTheme.typography.bodyMedium,
+                    fontWeight = FontWeight.Bold
+                )
+
                 Spacer(modifier = Modifier.height(8.dp))
+
+                Row(
+                    horizontalArrangement = Arrangement.spacedBy(6.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    listOf(128, 192, 256, 320).forEach { kbps ->
+                        FilterChip(
+                            selected = exportQuality == kbps,
+                            onClick = { viewModel.setExportQuality(kbps) },
+                            label = { Text("$kbps") },
+                            modifier = Modifier.weight(1f)
+                        )
+                    }
+                }
+
+                Spacer(modifier = Modifier.height(12.dp))
 
                 if (isRecording) {
                     Text(
@@ -487,7 +563,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // دکمه پخش/توقف
+        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
