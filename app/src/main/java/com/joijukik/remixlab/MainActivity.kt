@@ -84,6 +84,11 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val duration by viewModel.duration.collectAsState()
     val exportQuality by viewModel.exportQuality.collectAsState()
 
+    // 🎯 State های جدید
+    val outputFileName by viewModel.outputFileName.collectAsState()
+    val outputTitle by viewModel.outputTitle.collectAsState()
+    val outputArtist by viewModel.outputArtist.collectAsState()
+
     val isRecording by viewModel.isRecording.collectAsState()
     val isRecordingPaused by viewModel.isRecordingPaused.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
@@ -106,12 +111,10 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    // 🎯 ترتیب صحیح: اول اجازه، بعد سرویس، بعد ضبط
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
-            // 1. اول سرویس پیش‌زمینه را شروع کن
             val serviceIntent = Intent(context, MediaProjectionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent)
@@ -119,9 +122,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 context.startService(serviceIntent)
             }
 
-            // 2. کمی صبر کن تا سرویس کاملاً در حالت foreground قرار بگیرد
             Handler(Looper.getMainLooper()).postDelayed({
-                // 3. حالا MediaProjection را بگیر و ضبط را شروع کن
                 val projection = projectionManager.getMediaProjection(
                     result.resultCode, result.data!!
                 )
@@ -144,7 +145,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -170,7 +170,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ─── نمایش اسم آهنگ و نوار پیشرفت ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -210,7 +209,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── پنل AI ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -290,7 +288,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -336,7 +333,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── کنترل‌های دستی ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -373,7 +369,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── افکت‌ها ───
         Text(
             text = "افکت‌ها",
             style = MaterialTheme.typography.titleMedium,
@@ -449,6 +444,37 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     text = "💾 ذخیره ریمیکس (MP3)",
                     style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.Bold
+                )
+
+                Spacer(modifier = Modifier.height(12.dp))
+
+                // 🎯 فیلدهای نام‌گذاری و متادیتا
+                OutlinedTextField(
+                    value = outputFileName,
+                    onValueChange = { viewModel.setOutputFileName(it) },
+                    label = { Text("نام فایل") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = outputTitle,
+                    onValueChange = { viewModel.setOutputTitle(it) },
+                    label = { Text("عنوان آهنگ") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
+                )
+
+                Spacer(modifier = Modifier.height(8.dp))
+
+                OutlinedTextField(
+                    value = outputArtist,
+                    onValueChange = { viewModel.setOutputArtist(it) },
+                    label = { Text("هنرمند") },
+                    modifier = Modifier.fillMaxWidth(),
+                    singleLine = true
                 )
 
                 Spacer(modifier = Modifier.height(12.dp))
@@ -588,7 +614,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     Button(
                         onClick = {
                             viewModel.clearRecordingError()
-                            // 🎯 فقط دیالوگ اجازه ضبط رو نشون می‌دیم
                             projectionLauncher.launch(
                                 projectionManager.createScreenCaptureIntent()
                             )
@@ -609,7 +634,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
