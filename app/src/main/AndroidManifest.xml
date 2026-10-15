@@ -22,6 +22,7 @@
         android:supportsRtl="true"
         android:theme="@style/Theme.Material3.DayNight.NoActionBar"
         android:usesCleartextTraffic="true"
+        tools:replace="android:label,android:icon,android:roundIcon,android:theme"
         tools:targetApi="35">
 
         <activity
