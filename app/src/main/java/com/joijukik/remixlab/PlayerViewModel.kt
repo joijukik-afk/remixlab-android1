@@ -70,7 +70,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
     val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
-    // ─── State های پخش (جدید) ───
+    // ─── State های پخش ───
     private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
     val songName: StateFlow<String> = _songName
 
@@ -80,13 +80,16 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
 
-    // ─── کیفیت MP3 (جدید) ───
+    // ─── کیفیت MP3 ───
     private val _exportQuality = MutableStateFlow(320)
     val exportQuality: StateFlow<Int> = _exportQuality
 
     // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
+
+    private val _isRecordingPaused = MutableStateFlow(false)
+    val isRecordingPaused: StateFlow<Boolean> = _isRecordingPaused
 
     private val _recordingSeconds = MutableStateFlow(0L)
     val recordingSeconds: StateFlow<Long> = _recordingSeconds
@@ -122,7 +125,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         })
 
-        // ─── به‌روزرسانی موقعیت پخش هر ۵۰۰ میلی‌ثانیه ───
         viewModelScope.launch {
             while (true) {
                 if (player.isPlaying) {
@@ -133,17 +135,18 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        // کالبک‌های ضبط
         audioExporter.onProgress = { bytes ->
             _recordingSeconds.value = bytes / (48000L * 4L)
         }
         audioExporter.onFinish = { uri ->
             _lastSavedUri.value = uri
             _isRecording.value = false
+            _isRecordingPaused.value = false
         }
         audioExporter.onError = { msg ->
             _recordingError.value = msg
             _isRecording.value = false
+            _isRecordingPaused.value = false
         }
     }
 
@@ -172,7 +175,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
-    // ─── بارگذاری آهنگ ───
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
@@ -180,7 +182,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _songName.value = getFileName(uri)
     }
 
-    // ─── گرفتن اسم فایل ───
     private fun getFileName(uri: Uri): String {
         var name = "آهنگ ناشناخته"
         try {
@@ -198,18 +199,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         return name
     }
 
-    // ─── پرش به موقعیت (Seek) ───
     fun seekTo(positionMs: Long) {
         player.seekTo(positionMs)
         _currentPosition.value = positionMs
     }
 
-    // ─── تنظیم کیفیت MP3 ───
     fun setExportQuality(kbps: Int) {
         _exportQuality.value = kbps
     }
 
-    // ─── Slowed ───
     fun toggleSlowed() {
         _isSlowed.value = !_isSlowed.value
         if (_isSlowed.value) setSpeedInternal(0.8f) else setSpeedInternal(1.0f)
@@ -234,7 +232,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         player.playbackParameters = PlaybackParameters(_currentSpeed.value, _currentPitch.value)
     }
 
-    // ─── Reverb ───
     fun toggleReverb() {
         _isReverbEnabled.value = !_isReverbEnabled.value
         effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
@@ -247,25 +244,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── Bass Boost ───
     fun toggleBassBoost() {
         _isBassBoostEnabled.value = !_isBassBoostEnabled.value
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
     }
 
-    // ─── 8D Audio ───
     fun toggle8D() {
         _is8DEnabled.value = !_is8DEnabled.value
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
     }
 
-    // ─── Dynamics ───
     fun toggleDynamics() {
         _isDynamicsEnabled.value = !_isDynamicsEnabled.value
         dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
-    // ─── اعمال پریست COMA ───
     fun applyComaPreset(preset: ComaPreset) {
         _currentSpeed.value = preset.speed
         _isSlowed.value = preset.speed < 1.0f
@@ -297,7 +290,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── اعمال تنظیمات AI ───
     fun applyAiTuning(result: AiTuningAssistant.TuningResult) {
         _currentSpeed.value = result.speed
         _isSlowed.value = result.speed < 1.0f
@@ -332,7 +324,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── افکت‌های محیطی ───
     fun toggleAmbient(type: AmbientSoundManager.SoundType) {
         if (_activeAmbient.value == type) {
             ambientManager.stop()
@@ -353,16 +344,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _activeAmbient.value = null
     }
 
-    // ─── پخش/توقف ───
     fun playPause() {
         if (player.isPlaying) player.pause() else player.play()
     }
 
-    // ─── ضبط ───
     fun startRecording(mediaProjection: MediaProjection) {
         _recordingError.value = null
         _lastSavedUri.value = null
         _recordingSeconds.value = 0L
+        _isRecordingPaused.value = false
 
         if (!_isDynamicsEnabled.value) {
             _isDynamicsEnabled.value = true
@@ -381,9 +371,24 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
+    fun pauseRecording() {
+        if (!_isRecording.value || _isRecordingPaused.value) return
+        audioExporter.pauseRecording()
+        player.pause()
+        _isRecordingPaused.value = true
+    }
+
+    fun resumeRecording() {
+        if (!_isRecording.value || !_isRecordingPaused.value) return
+        audioExporter.resumeRecording()
+        player.play()
+        _isRecordingPaused.value = false
+    }
+
     fun stopRecording() {
         audioExporter.stopRecording()
         _isRecording.value = false
+        _isRecordingPaused.value = false
     }
 
     fun clearRecordingError() {
