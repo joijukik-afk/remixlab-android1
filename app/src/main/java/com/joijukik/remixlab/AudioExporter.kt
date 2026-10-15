@@ -49,6 +49,7 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
+            // 🎯 بافر بزرگ برای حذف خش صدا
             val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
             ) / 2
