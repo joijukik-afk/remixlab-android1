@@ -42,7 +42,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val audioExporter = AudioExporter(application)
     private val ambientManager = AmbientSoundManager()
 
-    // ─── State های اصلی ───
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
@@ -70,7 +69,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
     val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
-    // ─── State های پخش ───
     private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
     val songName: StateFlow<String> = _songName
 
@@ -80,11 +78,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
 
-    // ─── کیفیت MP3 ───
     private val _exportQuality = MutableStateFlow(320)
     val exportQuality: StateFlow<Int> = _exportQuality
 
-    // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
@@ -100,7 +96,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
-    // ─── State های افکت محیطی ───
     private val _activeAmbient = MutableStateFlow<AmbientSoundManager.SoundType?>(null)
     val activeAmbient: StateFlow<AmbientSoundManager.SoundType?> = _activeAmbient
 
