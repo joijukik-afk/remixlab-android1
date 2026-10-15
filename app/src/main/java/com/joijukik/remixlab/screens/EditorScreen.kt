@@ -184,7 +184,7 @@ fun EditorScreen(
                 Slider(
                     value = if (duration > 0) currentPosition.toFloat() else 0f,
                     onValueChange = { viewModel.seekTo(it.toLong()) },
-                    valueRange = 0f..(duration.coerceAtLeast(1).toFloat()),
+                    valueRange = 0f..(duration.coerceAtLeast(1L).toFloat()),
                     modifier = Modifier.fillMaxWidth()
                 )
 
@@ -192,8 +192,14 @@ fun EditorScreen(
                     modifier = Modifier.fillMaxWidth(),
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
-                    Text(text = formatTime(currentPosition / 1000), style = MaterialTheme.typography.bodySmall)
-                    Text(text = formatTime(duration / 1000), style = MaterialTheme.typography.bodySmall)
+                    Text(
+                        text = formatTime(currentPosition / 1000),
+                        style = MaterialTheme.typography.bodySmall
+                    )
+                    Text(
+                        text = formatTime(duration / 1000),
+                        style = MaterialTheme.typography.bodySmall
+                    )
                 }
             }
         }
@@ -230,7 +236,7 @@ fun EditorScreen(
                         if (aiPrompt.isNotBlank()) {
                             val result = AiTuningAssistant.analyzeRequest(aiPrompt)
                             aiResult = result
-                            viewModel.applyAiTuning(result)
+                            viewModel.applyAiTuning(aiPrompt)
                         }
                     },
                     modifier = Modifier.fillMaxWidth()
@@ -304,7 +310,10 @@ fun EditorScreen(
                 )
                 Spacer(modifier = Modifier.height(16.dp))
 
-                Text(text = "سرعت: ${"%.2f".format(currentSpeed)}x", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "سرعت: ${"%.2f".format(currentSpeed)}x",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Slider(
                     value = currentSpeed,
                     onValueChange = { viewModel.setCustomSpeed(it) },
@@ -315,7 +324,10 @@ fun EditorScreen(
 
                 Spacer(modifier = Modifier.height(8.dp))
 
-                Text(text = "گام: ${"%.2f".format(currentPitch)}x", style = MaterialTheme.typography.bodyMedium)
+                Text(
+                    text = "گام: ${"%.2f".format(currentPitch)}x",
+                    style = MaterialTheme.typography.bodyMedium
+                )
                 Slider(
                     value = currentPitch,
                     onValueChange = { viewModel.setPitch(it) },
@@ -569,8 +581,9 @@ private fun PresetButton(
     }
 }
 
-private fun formatTime(seconds: Long): String {
-    val mins = seconds / 60
-    val secs = seconds % 60
+private fun formatTime(seconds: Number): String {
+    val total = seconds.toLong()
+    val mins = total / 60
+    val secs = total % 60
     return "%02d:%02d".format(mins, secs)
 }
