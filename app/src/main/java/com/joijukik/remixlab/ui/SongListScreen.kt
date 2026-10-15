@@ -38,16 +38,14 @@ fun SongListScreen(
             ListItem(
                 headlineContent = { Text(song.title, maxLines = 1) },
                 supportingContent = { Text(song.artist, maxLines = 1) },
-                trailingContent = { Text(formatDuration(song.durationMs)) },
+                trailingContent = {
+                    val s = song.durationMs / 1000
+                    Text("%d:%02d".format(s / 60, s % 60))
+                },
                 leadingContent = { Icon(Icons.Default.MusicNote, contentDescription = null) },
                 modifier = Modifier.clickable { onSongClick(song) }
             )
             HorizontalDivider()
         }
     }
-}
-
-private fun formatDuration(ms: Long): String {
-    val totalSec = ms / 1000
-    return "%d:%02d".format(totalSec / 60, totalSec % 60)
 }
