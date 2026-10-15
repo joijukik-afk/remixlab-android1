@@ -544,7 +544,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                             )
                         ) {
                             Text(
-                                text = if (isRecordingPaused) "▶️ ادامه ضبط" else "⏸ توقف موقت",
+                                text = if (isRecordingPaused) "▶️ ادامه" else "⏸ توقف موقت",
                                 style = MaterialTheme.typography.titleMedium
                             )
                         }
@@ -569,7 +569,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                         onClick = {
                             viewModel.clearRecordingError()
 
-                            // 🎯 گام ۱: سرویس رو اول شروع کن
                             val serviceIntent = Intent(context, MediaProjectionService::class.java)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
@@ -577,15 +576,11 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                                 context.startService(serviceIntent)
                             }
 
-                            // 🎯 گام ۲: انتظار کافی برای اینکه سرویس کاملاً بالا بیاد
-                            // حالا که سرویس در onCreate شروع میشه، مطمئنیم که در حال اجراست
-                            // با این حال، یک تأخیر کوچک برای اطمینان لازمه
                             Handler(Looper.getMainLooper()).postDelayed({
-                                // 🎯 گام ۳: حالا دیالوگ ضبط رو نشون بده
                                 projectionLauncher.launch(
                                     projectionManager.createScreenCaptureIntent()
                                 )
-                            }, 500) // ۵۰۰ میلی‌ثانیه کافیه چون سرویس از قبل شروع شده
+                            }, 1000)
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
