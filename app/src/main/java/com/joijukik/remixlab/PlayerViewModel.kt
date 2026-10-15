@@ -369,9 +369,8 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     private fun rebuildMixComposition() {
-        val composition = mixManager.buildComposition()
-        // برای سادگی، فعلاً فقط track list رو ذخیره می‌کنیم
-        // (پیاده‌سازی کامل CompositionPlayer نیاز به تغییر type player دارد)
+        // نسخه ساده — فعلاً فقط لیست ترک‌ها رو نگه می‌داریم
+        // پخش همزمان چند ترک در نسخه بعدی اضافه میشه
     }
 
     // ========== Separation (شبیه‌سازی) ==========
@@ -395,7 +394,7 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _activeStemFilter.value = StemFilter.ALL
     }
 
-    // ========== Advanced Mix ==========
+    // ========== Advanced Mix (ساده‌شده) ==========
     fun setEqBand(band: Int, gainDb: Float) { effectsManager?.setPreEqBandGain(band, gainDb) }
     fun setCompressorThreshold(t: Float) { effectsManager?.setCompressorThreshold(0, t) }
     fun setCompressorRatio(r: Float) { effectsManager?.setCompressorRatio(0, r) }
