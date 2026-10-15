@@ -42,8 +42,8 @@ object ComaPresets {
         ),
         ComaPreset(
             id = "half_asleep",
-            name = "Half-Asleep Vocal",
-            description = "وکال نیمه‌خواب و دور",
+            name = "Half-Asleep",
+            description = "نیمه‌خواب و دور",
             speed = 0.80f,
             pitch = 0.95f,
             reverbPreset = PresetReverb.PRESET_MEDIUMHALL,
@@ -53,7 +53,7 @@ object ComaPresets {
         ComaPreset(
             id = "dark_dreamcore",
             name = "Dark Dreamcore",
-            description = "دریم‌کور تاریک و فضایی",
+            description = "دریم‌کور تاریک",
             speed = 0.72f,
             pitch = 0.98f,
             reverbPreset = PresetReverb.PRESET_LARGEHALL,
@@ -65,7 +65,7 @@ object ComaPresets {
         ComaPreset(
             id = "broken_tape",
             name = "Broken Tape",
-            description = "نوار خراب و آنالوگ",
+            description = "نوار خراب آنالوگ",
             speed = 0.88f,
             pitch = 0.96f,
             reverbPreset = PresetReverb.PRESET_MEDIUMROOM,
@@ -86,7 +86,7 @@ object ComaPresets {
         ),
         ComaPreset(
             id = "heartbeat_dark",
-            name = "Heartbeat in the Dark",
+            name = "Heartbeat in Dark",
             description = "ضربان در تاریکی",
             speed = 0.78f,
             pitch = 1.0f,
@@ -99,7 +99,7 @@ object ComaPresets {
         ComaPreset(
             id = "cinematic_outro",
             name = "Cinematic Outro",
-            description = "پایان سینمایی و احساسی",
+            description = "پایان سینمایی",
             speed = 0.90f,
             pitch = 1.0f,
             reverbPreset = PresetReverb.PRESET_MEDIUMHALL,
