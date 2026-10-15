@@ -53,4 +53,7 @@ dependencies {
     // ExoPlayer (Media3)
     implementation("androidx.media3:media3-exoplayer:1.2.0")
     implementation("androidx.media3:media3-common:1.2.0")
+
+    // 🎯 کتابخانه LAME برای انکود MP3
+    implementation("com.github.NorthernCaptain:TAndroidLame:1.1")
 }
