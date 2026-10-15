@@ -2,10 +2,6 @@ package com.joijukik.remixlab
 
 import android.media.audiofx.LoudnessEnhancer
 
-/**
- * مدیریت پردازش دینامیک صدا: تقویت بلندی (Loudness Enhancement)
- * این کلاس کیفیت خروجی رو بالا می‌بره و صدا رو شفاف‌تر می‌کنه
- */
 class DynamicsProcessorManager(audioSessionId: Int) {
 
     private var loudnessEnhancer: LoudnessEnhancer? = null
@@ -14,7 +10,7 @@ class DynamicsProcessorManager(audioSessionId: Int) {
         if (audioSessionId != 0 && audioSessionId != -1) {
             try {
                 loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
-                    setTargetGain(300)   // 3 dB تقویت
+                    setTargetGain(300)
                     enabled = false
                 }
             } catch (e: Exception) {
@@ -32,10 +28,6 @@ class DynamicsProcessorManager(audioSessionId: Int) {
         }
     }
 
-    /**
-     * تنظیم مقدار تقویت
-     * @param gainMillibels مقدار بین 0 تا 2000 (یعنی 0 تا 20 dB)
-     */
     fun setGain(gainMillibels: Int) {
         try {
             loudnessEnhancer?.setTargetGain(gainMillibels.coerceIn(0, 2000))
