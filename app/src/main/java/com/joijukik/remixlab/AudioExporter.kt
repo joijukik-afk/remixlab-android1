@@ -33,7 +33,7 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // تنظیمات ضبط با کیفیت استودیویی
+    // تنظیمات استودیویی
     private val sampleRate = 48000
     private val channelCount = 2
     private val bitRate = 320 // kbps
@@ -41,19 +41,18 @@ class AudioExporter(private val context: Context) {
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
-            // ۱. پیکربندی برای ضبط صدای درون برنامه
             val captureConfig = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            val minBufferSize = AudioRecord.getMinBufferSize(
+            // بافر بر حسب Short (نه Byte)
+            val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
-            )
-            val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate * 2)
+            ) / 2  // هر Short دو بایته
+            val bufferSizeShorts = (minBufferSizeShorts * 4).coerceAtLeast(sampleRate)
 
-            // ۲. ساخت AudioRecord
             val record = AudioRecord.Builder()
                 .setAudioFormat(
                     AudioFormat.Builder()
@@ -62,7 +61,7 @@ class AudioExporter(private val context: Context) {
                         .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                         .build()
                 )
-                .setBufferSizeInBytes(bufferSize)
+                .setBufferSizeInBytes(bufferSizeShorts * 2)
                 .setAudioPlaybackCaptureConfig(captureConfig)
                 .build()
 
@@ -77,9 +76,8 @@ class AudioExporter(private val context: Context) {
             record.startRecording()
             isRecording = true
 
-            // ۳. شروع نخ ضبط و انکود همزمان
             recordingThread = thread {
-                encodeAndWriteAudio(bufferSize)
+                encodeAndWriteAudio(bufferSizeShorts)
             }
 
             true
@@ -94,34 +92,49 @@ class AudioExporter(private val context: Context) {
         isRecording = false
     }
 
-    private fun encodeAndWriteAudio(bufferSize: Int) {
+    private fun encodeAndWriteAudio(bufferSizeShorts: Int) {
         val file = outputFile ?: return
 
-        // ۱. پیکربندی LameBuilder برای کیفیت بالا
+        // ۱. پیکربندی LAME
         val builder = LameBuilder()
             .setInSampleRate(sampleRate)
             .setOutChannels(channelCount)
             .setOutBitrate(bitRate)
             .setMode(LameBuilder.Mode.JSTEREO)
-            .setQuality(2) // 0=بهترین (کند), 9=بدترین (سریع)
-            .setVbrMode(LameBuilder.VbrMode.VBR_OFF) // CBR (کیفیت ثابت)
+            .setQuality(2)  // 0=بهترین, 9=سریع‌ترین
+            .setVbrMode(LameBuilder.VbrMode.VBR_OFF)
 
         androidLame = AndroidLame(builder)
 
-        val pcmBuffer = ByteArray(bufferSize)
-        val mp3Buffer = ByteArray((7200 + (1.25 * bufferSize)).toInt()) // بافر خروجی برای MP3
+        // ۲. بافرهای Short برای خواندن و تفکیک کانال
+        val pcmBuffer = ShortArray(bufferSizeShorts)
+        val leftChannel = ShortArray(bufferSizeShorts / 2)
+        val rightChannel = ShortArray(bufferSizeShorts / 2)
+        val mp3Buffer = ByteArray((7200 + (1.25 * bufferSizeShorts * 2)).toInt())
 
         try {
             FileOutputStream(file).use { outputStream ->
                 val record = audioRecord ?: return
                 while (isRecording) {
-                    val bytesRead = record.read(pcmBuffer, 0, pcmBuffer.size)
-                    if (bytesRead <= 0) continue
+                    // خواندن مستقیم در ShortArray
+                    val shortsRead = record.read(pcmBuffer, 0, pcmBuffer.size)
+                    if (shortsRead <= 0) continue
 
-                    // ۲. انکود داده‌های PCM به MP3
-                    // برای استریو، از همان بافر برای هر دو کانال استفاده می‌شود
+                    // تعداد نمونه در هر کانال (چون استریو)
+                    val samplesPerChannel = shortsRead / 2
+
+                    // تفکیک کانال چپ و راست (De-interleave)
+                    for (i in 0 until samplesPerChannel) {
+                        leftChannel[i] = pcmBuffer[i * 2]
+                        rightChannel[i] = pcmBuffer[i * 2 + 1]
+                    }
+
+                    // انکود به MP3
                     val bytesEncoded = androidLame?.encode(
-                        pcmBuffer, pcmBuffer, bytesRead, mp3Buffer
+                        leftChannel,
+                        rightChannel,
+                        samplesPerChannel,
+                        mp3Buffer
                     ) ?: 0
 
                     if (bytesEncoded > 0) {
@@ -134,14 +147,13 @@ class AudioExporter(private val context: Context) {
             e.printStackTrace()
             onError?.invoke("خطا در انکود: ${e.message}")
         } finally {
-            // ۳. آزادسازی منابع
+            // آزادسازی
             androidLame?.close()
             androidLame = null
             try { audioRecord?.stop() } catch (_: Exception) {}
             try { audioRecord?.release() } catch (_: Exception) {}
             audioRecord = null
 
-            // ۴. ذخیره فایل MP3 نهایی
             saveMp3ToMediaStore(file)
         }
     }
@@ -152,7 +164,7 @@ class AudioExporter(private val context: Context) {
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg") // 👈 MIME type برای MP3
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
             put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
             put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
@@ -170,7 +182,7 @@ class AudioExporter(private val context: Context) {
 
         val uri = context.contentResolver.insert(collection, values)
         if (uri == null) {
-            onError?.invoke("خطا در ثبت فایل MP3 در MediaStore")
+            onError?.invoke("خطا در ثبت MP3 در MediaStore")
             return
         }
 
