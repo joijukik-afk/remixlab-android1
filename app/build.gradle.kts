@@ -25,6 +25,10 @@ android {
     buildTypes {
         release {
             isMinifyEnabled = false
+            proguardFiles(
+                getDefaultProguardFile("proguard-android-optimize.txt"),
+                "proguard-rules.pro"
+            )
         }
     }
     compileOptions {
@@ -57,6 +61,4 @@ dependencies {
         exclude(group = "com.android.support", module = "support-compat")
         exclude(group = "com.android.support", module = "support-core-utils")
     }
-
-    implementation("be.tarsos.dsp:core:2.5")
 }
