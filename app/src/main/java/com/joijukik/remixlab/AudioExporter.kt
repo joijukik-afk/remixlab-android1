@@ -6,10 +6,6 @@ import android.media.AudioAttributes
 import android.media.AudioFormat
 import android.media.AudioPlaybackCaptureConfiguration
 import android.media.AudioRecord
-import android.media.MediaCodec
-import android.media.MediaCodecInfo
-import android.media.MediaFormat
-import android.media.MediaMuxer
 import android.media.projection.MediaProjection
 import android.net.Uri
 import android.os.Build
@@ -29,15 +25,16 @@ class AudioExporter(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
-    private var outputFile: File? = null
+    private var pcmFile: File? = null
 
     var onProgress: ((Long) -> Unit)? = null
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
+    // کیفیت استودیویی
     private val sampleRate = 48000
     private val channelCount = 2
-    private val bitRate = 256 * 1024
+    private val bitRate = 320 * 1024 // 320 kbps for MP3
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
@@ -47,6 +44,7 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
+            // بافر بزرگ برای جلوگیری از underrun (خش صدا)
             val minBufferSize = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
             )
@@ -71,12 +69,12 @@ class AudioExporter(private val context: Context) {
             }
 
             audioRecord = record
-            outputFile = createTempFile()
+            pcmFile = createTempPcmFile()
             record.startRecording()
             isRecording = true
 
             recordingThread = thread {
-                encodeToM4a(bufferSize)
+                writePcmData(bufferSize)
             }
 
             true
@@ -91,144 +89,52 @@ class AudioExporter(private val context: Context) {
         isRecording = false
     }
 
-    private fun encodeToM4a(bufferSize: Int) {
-        val file = outputFile ?: run {
-            onError?.invoke("فایل خروجی وجود ندارد")
-            return
-        }
+    private fun writePcmData(bufferSize: Int) {
+        val file = pcmFile ?: return
+        val data = ByteArray(bufferSize)
+        var totalBytes: Long = 0
 
-        var muxer: MediaMuxer? = null
-        var codec: MediaCodec? = null
-
-        try {
-            muxer = MediaMuxer(file.absolutePath, MediaMuxer.OutputFormat.MUXER_OUTPUT_MPEG_4)
-
-            val format = MediaFormat.createAudioFormat(
-                MediaFormat.MIMETYPE_AUDIO_AAC, sampleRate, channelCount
-            ).apply {
-                setInteger(MediaFormat.KEY_BIT_RATE, bitRate)
-                setInteger(MediaFormat.KEY_AAC_PROFILE, MediaCodecInfo.CodecProfileLevel.AACObjectLC)
-                setInteger(MediaFormat.KEY_MAX_INPUT_SIZE, bufferSize * 2)
-                setInteger(MediaFormat.KEY_CHANNEL_COUNT, channelCount)
-                setInteger(MediaFormat.KEY_SAMPLE_RATE, sampleRate)
-            }
-
-            codec = MediaCodec.createEncoderByType(MediaFormat.MIMETYPE_AUDIO_AAC)
-            codec.configure(format, null, null, MediaCodec.CONFIGURE_FLAG_ENCODE)
-            codec.start()
-
-            val bufferInfo = MediaCodec.BufferInfo()
-            val pcmBuffer = ByteArray(bufferSize)
-            var totalBytesRead: Long = 0
-            var presentationTimeUs: Long = 0
-            val timeoutUs = 10000L
-            var trackIndex = -1
-            var muxerStarted = false
-
-            val record = audioRecord ?: run {
-                onError?.invoke("AudioRecord null شد")
-                return
-            }
-
+        file.outputStream().use { outputStream ->
+            val record = audioRecord ?: return
             while (isRecording) {
-                val bytesRead = record.read(pcmBuffer, 0, pcmBuffer.size)
-                if (bytesRead <= 0) continue
-                totalBytesRead += bytesRead
-
-                val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
-                if (inputBufferIndex >= 0) {
-                    val inputBuffer = codec.getInputBuffer(inputBufferIndex)
-                    if (inputBuffer != null) {
-                        inputBuffer.clear()
-                        inputBuffer.put(pcmBuffer, 0, bytesRead)
-                        codec.queueInputBuffer(inputBufferIndex, 0, bytesRead, presentationTimeUs, 0)
-                        presentationTimeUs += (bytesRead.toLong() * 1_000_000L) / (sampleRate.toLong() * channelCount * 2)
-                    }
+                val read = record.read(data, 0, bufferSize)
+                if (read > 0) {
+                    outputStream.write(data, 0, read)
+                    totalBytes += read
+                    onProgress?.invoke(totalBytes)
                 }
-
-                var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
-                while (outputBufferIndex >= 0) {
-                    val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
-                    if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) {
-                        bufferInfo.size = 0
-                    }
-                    if (bufferInfo.size > 0 && outputBuffer != null) {
-                        if (!muxerStarted) {
-                            trackIndex = muxer.addTrack(codec.outputFormat)
-                            muxer.start()
-                            muxerStarted = true
-                        }
-                        outputBuffer.position(bufferInfo.offset)
-                        outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                        muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
-                    }
-                    codec.releaseOutputBuffer(outputBufferIndex, false)
-                    outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
-                }
-                onProgress?.invoke(totalBytesRead)
             }
-
-            val inputBufferIndex = codec.dequeueInputBuffer(timeoutUs)
-            if (inputBufferIndex >= 0) {
-                codec.queueInputBuffer(inputBufferIndex, 0, 0, presentationTimeUs, MediaCodec.BUFFER_FLAG_END_OF_STREAM)
-            }
-            var outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, timeoutUs)
-            while (outputBufferIndex >= 0) {
-                val outputBuffer = codec.getOutputBuffer(outputBufferIndex)
-                if (bufferInfo.flags and MediaCodec.BUFFER_FLAG_CODEC_CONFIG != 0) bufferInfo.size = 0
-                if (bufferInfo.size > 0 && outputBuffer != null && muxerStarted) {
-                    outputBuffer.position(bufferInfo.offset)
-                    outputBuffer.limit(bufferInfo.offset + bufferInfo.size)
-                    muxer.writeSampleData(trackIndex, outputBuffer, bufferInfo)
-                }
-                codec.releaseOutputBuffer(outputBufferIndex, false)
-                outputBufferIndex = codec.dequeueOutputBuffer(bufferInfo, 0)
-            }
-
-            try { codec.stop() } catch (_: Exception) {}
-            try { codec.release() } catch (_: Exception) {}
-            try { if (muxerStarted) muxer.stop() } catch (_: Exception) {}
-            try { muxer.release() } catch (_: Exception) {}
-            try { record.stop() } catch (_: Exception) {}
-            try { record.release() } catch (_: Exception) {}
-            audioRecord = null
-
-            // 🔑 حالا M4A رو به MP3 تبدیل کن
-            convertM4aToMp3(file)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            onError?.invoke("${e.javaClass.simpleName}: ${e.message}")
-            try { codec?.stop() } catch (_: Exception) {}
-            try { codec?.release() } catch (_: Exception) {}
-            try { muxer?.release() } catch (_: Exception) {}
-            try { audioRecord?.stop() } catch (_: Exception) {}
-            try { audioRecord?.release() } catch (_: Exception) {}
-            audioRecord = null
-        } finally {
-            isRecording = false
-            recordingThread = null
         }
+
+        try { audioRecord?.stop() } catch (_: Exception) {}
+        try { audioRecord?.release() } catch (_: Exception) {}
+        audioRecord = null
+
+        // 🔑 تبدیل PCM به MP3 با FFmpeg
+        convertPcmToMp3(file)
     }
 
     /**
-     * تبدیل فایل M4A به MP3 با FFmpeg
+     * تبدیل فایل خام PCM به MP3 با استفاده از کتابخانه LAME
      */
-    private fun convertM4aToMp3(m4aFile: File) {
-        val mp3File = File(m4aFile.parentFile, m4aFile.nameWithoutExtension + ".mp3")
+    private fun convertPcmToMp3(pcmFile: File) {
+        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
+        val outputDir = File(context.cacheDir, "recordings")
+        if (!outputDir.exists()) outputDir.mkdirs()
+        val mp3File = File(outputDir, "RemixLab_$timestamp.mp3")
 
-        val command = "-y -i \"${m4aFile.absolutePath}\" -codec:a libmp3lame -b:a 320k \"${mp3File.absolutePath}\""
+        // 🎯 دستور FFmpeg برای تبدیل PCM به MP3 با کیفیت 320kbps
+        val command = "-y -f s16le -ar $sampleRate -ac $channelCount -i \"${pcmFile.absolutePath}\" -codec:a libmp3lame -b:a 320k \"${mp3File.absolutePath}\""
 
         FFmpegKit.executeAsync(command) { session ->
             val returnCode = session.returnCode
             if (ReturnCode.isSuccess(returnCode)) {
-                // تبدیل موفق - فایل M4A رو پاک کن و MP3 رو ذخیره کن
-                m4aFile.delete()
+                // ✅ تبدیل موفق - فایل PCM رو پاک کن و MP3 رو ذخیره کن
+                pcmFile.delete()
                 saveMp3ToMediaStore(mp3File)
             } else {
-                onError?.invoke("خطا در تبدیل به MP3: ${session.failStackTrace ?: "خطای ناشناخته"}")
-                // اگه تبدیل نشد، حداقل فایل M4A رو ذخیره کن
-                saveM4aToMediaStore(m4aFile)
+                onError?.invoke("خطا در تبدیل به MP3: ${session.failStackTrace}")
+                // اگه تبدیل نشد، فایل PCM رو نگه دار (برای دیباگ)
             }
         }
     }
@@ -242,7 +148,7 @@ class AudioExporter(private val context: Context) {
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg")
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg") // ← MP3 MIME type
             put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
             put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
@@ -287,59 +193,9 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    /**
-     * ذخیره فایل M4A (در صورت خطای تبدیل) - fallback
-     */
-    private fun saveM4aToMediaStore(m4aFile: File) {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val fileName = "RemixLab_$timestamp.m4a"
-
-        val values = ContentValues().apply {
-            put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mp4")
-            put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
-            put(MediaStore.Audio.Media.IS_MUSIC, 1)
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/RemixLab")
-                put(MediaStore.Audio.Media.IS_PENDING, 1)
-            }
-        }
-
-        val collection = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            MediaStore.Audio.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)
-        } else {
-            MediaStore.Audio.Media.EXTERNAL_CONTENT_URI
-        }
-
-        val uri = context.contentResolver.insert(collection, values) ?: return
-
-        try {
-            context.contentResolver.openOutputStream(uri)?.use { outputStream ->
-                FileInputStream(m4aFile).use { inputStream ->
-                    inputStream.copyTo(outputStream)
-                }
-            }
-
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-                values.clear()
-                values.put(MediaStore.Audio.Media.IS_PENDING, 0)
-                context.contentResolver.update(uri, values, null, null)
-            }
-
-            m4aFile.delete()
-            onFinish?.invoke(uri)
-
-        } catch (e: Exception) {
-            e.printStackTrace()
-            context.contentResolver.delete(uri, null, null)
-            onError?.invoke("خطا در ذخیره M4A: ${e.message}")
-        }
-    }
-
-    private fun createTempFile(): File {
+    private fun createTempPcmFile(): File {
         val dir = File(context.cacheDir, "recordings")
         if (!dir.exists()) dir.mkdirs()
-        return File(dir, "temp_${System.currentTimeMillis()}.m4a")
+        return File(dir, "temp_${System.currentTimeMillis()}.pcm")
     }
 }
