@@ -24,22 +24,12 @@ class MainActivity : ComponentActivity() {
                     color = MaterialTheme.colorScheme.background
                 ) {
                     val navController = rememberNavController()
-
-                    NavHost(
-                        navController = navController,
-                        startDestination = Routes.HOME
-                    ) {
+                    NavHost(navController = navController, startDestination = Routes.HOME) {
                         composable(Routes.HOME) {
-                            HomeScreen(
-                                onNavigateToEditor = {
-                                    navController.navigate(Routes.EDITOR)
-                                }
-                            )
+                            HomeScreen(onNavigateToEditor = { navController.navigate(Routes.EDITOR) })
                         }
                         composable(Routes.EDITOR) {
-                            EditorScreen(
-                                onBack = { navController.popBackStack() }
-                            )
+                            EditorScreen(onBack = { navController.popBackStack() })
                         }
                     }
                 }
