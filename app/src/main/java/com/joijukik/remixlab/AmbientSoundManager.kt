@@ -8,10 +8,6 @@ import kotlin.math.PI
 import kotlin.math.exp
 import kotlin.math.sin
 
-/**
- * تولید و پخش صداهای محیطی (باران، باد، رعد و...)
- * بدون نیاز به فایل صوتی - کاملاً در کد ساخته می‌شه
- */
 class AmbientSoundManager {
 
     private var audioTrack: AudioTrack? = null
