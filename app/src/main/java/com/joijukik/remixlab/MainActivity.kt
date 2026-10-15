@@ -8,6 +8,8 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
+import android.os.Handler
+import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -104,12 +106,12 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    // 🎯 وقتی کاربر اجازه داد، اول سرویس رو شروع می‌کنیم، بعد ضبط رو
+    // 🎯 اصلاح شده: بعد از گرفتن اجازه، اول سرویس رو شروع می‌کنیم و بعد از کمی تاخیر، MediaProjection رو می‌گیریم
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
-            // 🎯 حالا که اجازه گرفتیم، سرویس رو شروع می‌کنیم
+            // 1. اول سرویس پیش‌زمینه را شروع کن
             val serviceIntent = Intent(context, MediaProjectionService::class.java)
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                 context.startForegroundService(serviceIntent)
@@ -117,11 +119,15 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 context.startService(serviceIntent)
             }
 
-            // و بعد ضبط رو شروع می‌کنیم
-            val projection = projectionManager.getMediaProjection(
-                result.resultCode, result.data!!
-            )
-            viewModel.startRecording(projection)
+            // 2. کمی صبر کن تا سرویس کاملاً در حالت foreground قرار بگیرد
+            // این تاخیر برای اطمینان از فراخوانی موفق getMediaProjection در اندروید ۱۴+ حیاتی است.
+            Handler(Looper.getMainLooper()).postDelayed({
+                // 3. حالا که سرویس آماده است، MediaProjection را بگیر
+                val projection = projectionManager.getMediaProjection(
+                    result.resultCode, result.data!!
+                )
+                viewModel.startRecording(projection)
+            }, 500) // 500 میلی‌ثانیه تاخیر کافی است
         }
     }
 
@@ -578,7 +584,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                             viewModel.clearRecordingError()
 
                             // 🎯 فقط دیالوگ اجازه ضبط رو نشون می‌دیم
-                            // سرویس بعد از اجازه کاربر شروع می‌شه
                             projectionLauncher.launch(
                                 projectionManager.createScreenCaptureIntent()
                             )
