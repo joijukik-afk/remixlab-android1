@@ -1,45 +1,35 @@
 package com.joijukik.remixlab
 
 import android.media.audiofx.LoudnessEnhancer
+import android.util.Log
 
 class DynamicsProcessorManager(audioSessionId: Int) {
 
-    private var loudnessEnhancer: LoudnessEnhancer? = null
+    private val tag = "Dynamics"
 
-    init {
-        if (audioSessionId != 0 && audioSessionId != -1) {
-            try {
-                loudnessEnhancer = LoudnessEnhancer(audioSessionId).apply {
-                    setTargetGain(300)
-                    enabled = false
-                }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                loudnessEnhancer = null
-            }
+    private val loudness: LoudnessEnhancer? = try {
+        LoudnessEnhancer(audioSessionId).apply {
+            setTargetGain(0)
+            enabled = false
+        }
+    } catch (e: Exception) {
+        Log.e(tag, "LoudnessEnhancer init failed", e); null
+    }
+
+    fun setEnabled(enabled: Boolean, targetGainMb: Int = 600) {
+        loudness?.let {
+            it.setTargetGain(targetGainMb)
+            it.enabled = enabled
         }
     }
 
-    fun setEnabled(enabled: Boolean) {
-        try {
-            loudnessEnhancer?.enabled = enabled
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
-    }
-
-    fun setGain(gainMillibels: Int) {
-        try {
-            loudnessEnhancer?.setTargetGain(gainMillibels.coerceIn(0, 2000))
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun setGain(gainMb: Int) {
+        try { loudness?.setTargetGain(gainMb) } catch (e: Exception) {
+            Log.e(tag, "setGain fail", e)
         }
     }
 
     fun release() {
-        try {
-            loudnessEnhancer?.release()
-        } catch (_: Exception) { }
-        loudnessEnhancer = null
+        try { loudness?.release() } catch (_: Exception) {}
     }
 }
