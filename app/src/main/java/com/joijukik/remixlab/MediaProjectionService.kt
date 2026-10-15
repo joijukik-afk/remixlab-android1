@@ -16,7 +16,6 @@ class MediaProjectionService : Service() {
         const val CHANNEL_ID = "remixlab_projection_channel"
         const val NOTIFICATION_ID = 1
 
-        // 🎯 فلگ برای بررسی آماده بودن سرویس
         @Volatile
         var isRunning: Boolean = false
             private set
@@ -42,7 +41,6 @@ class MediaProjectionService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
-        // 🎯 علامت‌گذاری که سرویس آماده است
         isRunning = true
 
         return START_NOT_STICKY
