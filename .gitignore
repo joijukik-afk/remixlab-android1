@@ -1,14 +1,104 @@
-*.iml
-.gradle
-/local.properties
-/.idea
-.DS_Store
-/build
-/captures
-.externalNativeBuild
-.cxx
-local.properties
-*.apk
-*.aab
-*.keystore
-*.jks
+# ================================================================
+#  RemixLab - local.properties
+#  این فایل مخصوص محیط شماست و نباید در Git ذخیره شود
+#  Generated: 2026
+# ================================================================
+
+# ----------------------------------------------------------------
+# 1) مسیر Android SDK (حتماً باید باشه)
+# ----------------------------------------------------------------
+# WINDOWS (مسیر پیشفرض):
+sdk.dir=C\:\\Users\\YourUsername\\AppData\\Local\\Android\\Sdk
+
+# MAC (اگه مک داری این خط رو از کامنت دربیار و بالایی رو کامنت کن):
+# sdk.dir=/Users/YourUsername/Library/Android/sdk
+
+# LINUX (اگه لینوکس داری این خط رو از کامنت دربیار و بالایی رو کامنت کن):
+# sdk.dir=/home/YourUsername/Android/Sdk
+
+
+# ----------------------------------------------------------------
+# 2) کلید API دیپسیک (برای دستیار AI)
+# ----------------------------------------------------------------
+# از این آدرس بگیر: https://platform.deepseek.com/api_keys
+# اگه AI نمیخوای، خالی بذار یا کامنت کن
+DEEPSEEK_API_KEY=sk-your-deepseek-api-key-here
+
+
+# ----------------------------------------------------------------
+# 3) تنظیمات Gradle (اختیاری - برای سرعت بیشتر)
+# ----------------------------------------------------------------
+# JVM Arguments (اگه سیستم قوی داری بیشترش کن)
+org.gradle.jvmargs=-Xmx6144m -XX:MaxMetaspaceSize=1g -XX:+HeapDumpOnOutOfMemoryError -Dfile.encoding=UTF-8
+
+# فعالسازی Gradle Daemon و Parallel Build
+org.gradle.daemon=true
+org.gradle.parallel=true
+org.gradle.caching=true
+org.gradle.configureondemand=true
+
+# فعالسازی Kotlin Incremental Compilation (سرعت Build)
+kotlin.incremental=true
+kotlin.incremental.java=true
+kotlin.incremental.js=true
+
+# AndroidX
+android.useAndroidX=true
+android.enableJetifier=true
+android.nonTransitiveRClass=true
+android.nonFinalResIds=false
+android.defaults.buildfeatures.buildconfig=true
+
+# کامپایل سریعتر Compose
+android.experimental.enableScreenshotTest=true
+android.experimental.androidTest.useUnifiedTestPlatform=true
+
+
+# ----------------------------------------------------------------
+# 4) تنظیمات شبکه (اگه Proxy داری)
+# ----------------------------------------------------------------
+# اگه پشت پروکسی هستی این خطوط رو از کامنت دربیار:
+# systemProp.http.proxyHost=127.0.0.1
+# systemProp.http.proxyPort=8080
+# systemProp.https.proxyHost=127.0.0.1
+# systemProp.https.proxyPort=8080
+
+# اگه از شکن/تحریمشکن استفاده میکنی:
+# systemProp.http.nonProxyHosts=localhost|127.0.0.1|*.local
+
+
+# ----------------------------------------------------------------
+# 5) اطلاعات دیباگ (اختیاری)
+# ----------------------------------------------------------------
+# فعالسازی logging برای خطایابی Gradle
+# org.gradle.logging.level=info
+
+# Build Tools Version (خودکار تشخیص داده میشه)
+# buildToolsVersion=35.0.0
+
+# NDK Version (برای LAME native lib لازمه)
+# ndk.version=26.1.10909125
+
+
+# ----------------------------------------------------------------
+# 6) Firebase (اگه بعداً اضافه کردی)
+# ----------------------------------------------------------------
+# GOOGLE_SERVICES_JSON=./app/google-services.json
+
+# ----------------------------------------------------------------
+# 7) Google Maps (اگه بعداً اضافه کردی)
+# ----------------------------------------------------------------
+# MAPS_API_KEY=your-google-maps-api-key
+
+# ----------------------------------------------------------------
+# 8) کلیدهای اضافی برای سرویسهای دیگه (اختیاری)
+# ----------------------------------------------------------------
+# OPENAI_API_KEY=sk-xxxx
+# HUGGINGFACE_API_KEY=hf_xxxx
+# SPOTIFY_CLIENT_ID=xxxx
+# YOUTUBE_API_KEY=AIza-xxxx
+
+
+# ================================================================
+#  پایان فایل - این فایل رو توی .gitignore بذار!
+# ================================================================
