@@ -12,6 +12,7 @@ import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
+import com.joijukik.remixlab.data.CustomPresetStore
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,9 +25,24 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
     val player: ExoPlayer = ExoPlayer.Builder(app).build()
 
-    // ============ STATE ============
+    private var effectsManager: AudioEffectsManager? = null
+    private var dynamicsManager: DynamicsProcessorManager? = null
+    private val ambientManager = AmbientSoundManager()
+    val audioExporter = AudioExporter(app)
+    private val presetStore = CustomPresetStore(app)
+    private val aiAssistant = AiTuningAssistant()
+
     private val _isPlaying = MutableStateFlow(false)
     val isPlaying: StateFlow<Boolean> = _isPlaying
+
+    private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
+    val songName: StateFlow<String> = _songName
+
+    private val _currentPosition = MutableStateFlow(0L)
+    val currentPosition: StateFlow<Long> = _currentPosition
+
+    private val _duration = MutableStateFlow(0L)
+    val duration: StateFlow<Long> = _duration
 
     private val _currentSpeed = MutableStateFlow(1.0f)
     val currentSpeed: StateFlow<Float> = _currentSpeed
@@ -49,16 +65,12 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _isDynamicsEnabled = MutableStateFlow(false)
     val isDynamicsEnabled: StateFlow<Boolean> = _isDynamicsEnabled
 
-    private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
-    val songName: StateFlow<String> = _songName
+    private val _activeAmbient = MutableStateFlow<AmbientType?>(null)
+    val activeAmbient: StateFlow<AmbientType?> = _activeAmbient
 
-    private val _currentPosition = MutableStateFlow(0L)
-    val currentPosition: StateFlow<Long> = _currentPosition
+    private val _ambientVolume = MutableStateFlow(0.4f)
+    val ambientVolume: StateFlow<Float> = _ambientVolume
 
-    private val _duration = MutableStateFlow(0L)
-    val duration: StateFlow<Long> = _duration
-
-    // Export / Recording
     private val _exportQuality = MutableStateFlow(320)
     val exportQuality: StateFlow<Int> = _exportQuality
 
@@ -86,7 +98,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
-    // Search
     private val _searchQuery = MutableStateFlow("")
     val searchQuery: StateFlow<String> = _searchQuery
 
@@ -96,14 +107,24 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
     private val _aiExplanation = MutableStateFlow<String?>(null)
     val aiExplanation: StateFlow<String?> = _aiExplanation
 
+    private val _aiLoading = MutableStateFlow(false)
+    val aiLoading: StateFlow<Boolean> = _aiLoading
+
     private var progressJob: Job? = null
-    private var recordJob: Job? = null
 
     init {
         player.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                effectsManager?.release()
+                dynamicsManager?.release()
+                effectsManager = AudioEffectsManager(audioSessionId)
+                dynamicsManager = DynamicsProcessorManager(audioSessionId)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
             }
+
             override fun onPlaybackStateChanged(state: Int) {
                 if (state == Player.STATE_READY) {
                     _duration.value = player.duration.coerceAtLeast(0)
@@ -121,9 +142,18 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                 delay(400)
             }
         }
+
+        audioExporter.onProgress = { sec -> _recordingSeconds.value = sec }
+        audioExporter.onFinish = { path ->
+            _isRecording.value = false
+            _lastSavedUri.value = path
+        }
+        audioExporter.onError = { err ->
+            _isRecording.value = false
+            _recordingError.value = err
+        }
     }
 
-    // ============ پخش ============
     fun loadSong(uri: Uri, title: String? = null) {
         val item = MediaItem.fromUri(uri)
         player.setMediaItem(item)
@@ -142,7 +172,6 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         _currentPosition.value = positionMs
     }
 
-    // ============ سرعت و پیچ ============
     fun setCustomSpeed(speed: Float) {
         _currentSpeed.value = speed
         player.playbackParameters = PlaybackParameters(speed, _currentPitch.value)
@@ -159,88 +188,189 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
         setCustomSpeed(if (_isSlowed.value) 0.8f else 1.0f)
     }
 
-    // ============ افکت‌ها (فعلاً فقط state) ============
-    fun toggleReverb() { _isReverbEnabled.value = !_isReverbEnabled.value }
-    fun toggleBassBoost() { _isBassBoostEnabled.value = !_isBassBoostEnabled.value }
-    fun toggle8D() { _is8DEnabled.value = !_is8DEnabled.value }
-    fun toggleDynamics() { _isDynamicsEnabled.value = !_isDynamicsEnabled.value }
-
-    // ============ پریست‌ها ============
-    fun applyComaPreset(preset: com.joijukik.remixlab.model.ComaPreset) {
-        setCustomSpeed(preset.speed)
-        setPitch(preset.pitch)
-        _isReverbEnabled.value = preset.reverbPreset != null
-        _isBassBoostEnabled.value = preset.bassBoost
-        _is8DEnabled.value = preset.virtualizer
-        _isDynamicsEnabled.value = preset.dynamics
+    fun toggleReverb() {
+        _isReverbEnabled.value = !_isReverbEnabled.value
+        effectsManager?.setReverbEnabled(
+            _isReverbEnabled.value,
+            PresetReverb.PRESET_LARGEROOM
+        )
     }
 
-    // ============ AI (ساده و بدون API) ============
-    fun applyAiTuning(prompt: String) {
-        // تحلیل ساده‌ی متن ورودی
+    fun toggleBassBoost() {
+        _isBassBoostEnabled.value = !_isBassBoostEnabled.value
+        effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
+    }
+
+    fun toggle8D() {
+        _is8DEnabled.value = !_is8DEnabled.value
+        effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
+    }
+
+    fun toggleDynamics() {
+        _isDynamicsEnabled.value = !_isDynamicsEnabled.value
+        dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
+    }
+
+    fun setAmbient(type: AmbientType?) {
+        if (type == null) {
+            ambientManager.stop()
+            _activeAmbient.value = null
+        } else {
+            ambientManager.play(type, _ambientVolume.value)
+            _activeAmbient.value = type
+        }
+    }
+
+    fun setAmbientVolume(v: Float) {
+        _ambientVolume.value = v
+        ambientManager.setVolume(v)
+    }
+
+    fun applyComaPreset(preset: ComaPreset) {
+        setCustomSpeed(preset.speed)
+        setPitch(preset.pitch)
+
+        _isReverbEnabled.value = preset.reverbPreset != null
+        preset.reverbPreset?.let {
+            effectsManager?.setReverbEnabled(true, it)
+        } ?: effectsManager?.setReverbEnabled(false)
+
+        _isBassBoostEnabled.value = preset.bassBoost
+        effectsManager?.setBassBoostEnabled(preset.bassBoost)
+
+        _is8DEnabled.value = preset.virtualizer
+        effectsManager?.setVirtualizerEnabled(preset.virtualizer)
+
+        _isDynamicsEnabled.value = preset.dynamics
+        dynamicsManager?.setEnabled(preset.dynamics)
+
+        if (preset.ambientSound != null) {
+            setAmbientVolume(preset.ambientVolume)
+            setAmbient(preset.ambientSound)
+        } else {
+            setAmbient(null)
+        }
+    }
+
+    fun saveCurrentAsPreset(name: String, icon: String = "⭐") {
+        val id = "custom_${System.currentTimeMillis()}"
+        val preset = ComaPreset(
+            id = id,
+            name = name,
+            description = "پریست سفارشی",
+            speed = _currentSpeed.value,
+            pitch = _currentPitch.value,
+            reverbPreset = if (_isReverbEnabled.value) PresetReverb.PRESET_LARGEROOM else null,
+            bassBoost = _isBassBoostEnabled.value,
+            virtualizer = _is8DEnabled.value,
+            dynamics = _isDynamicsEnabled.value,
+            ambientSound = _activeAmbient.value,
+            ambientVolume = _ambientVolume.value,
+            icon = icon
+        )
+        presetStore.savePreset(preset)
+    }
+
+    fun applyAiTuning(result: Any) {
+        when (result) {
+            is String -> applyAiFromText(result)
+            else -> applyAiFromReflection(result)
+        }
+    }
+
+    private fun applyAiFromText(prompt: String) {
         val lower = prompt.lowercase()
-        if (lower.contains("بارون") || lower.contains("rain")) {
-            setCustomSpeed(0.85f)
-            setPitch(0.95f)
-            _isReverbEnabled.value = true
-        } else if (lower.contains("شب") || lower.contains("night")) {
-            setCustomSpeed(0.8f)
-            _isReverbEnabled.value = true
-            _isBassBoostEnabled.value = true
-        } else if (lower.contains("تند") || lower.contains("nightcore")) {
-            setCustomSpeed(1.25f)
-            setPitch(1.15f)
-        } else if (lower.contains("غرق") || lower.contains("deep")) {
-            setCustomSpeed(0.7f)
-            _isBassBoostEnabled.value = true
-            _isDynamicsEnabled.value = true
+        when {
+            lower.contains("بارون") || lower.contains("rain") -> {
+                setCustomSpeed(0.85f)
+                setPitch(0.95f)
+                _isReverbEnabled.value = true
+                effectsManager?.setReverbEnabled(true, PresetReverb.PRESET_PLATE)
+            }
+            lower.contains("شب") || lower.contains("night") -> {
+                setCustomSpeed(0.8f)
+                _isReverbEnabled.value = true
+                _isBassBoostEnabled.value = true
+                effectsManager?.setReverbEnabled(true, PresetReverb.PRESET_LARGEROOM)
+                effectsManager?.setBassBoostEnabled(true)
+            }
+            lower.contains("تند") || lower.contains("nightcore") -> {
+                setCustomSpeed(1.25f)
+                setPitch(1.15f)
+            }
+            lower.contains("غرق") || lower.contains("deep") -> {
+                setCustomSpeed(0.7f)
+                _isBassBoostEnabled.value = true
+                _isDynamicsEnabled.value = true
+                effectsManager?.setBassBoostEnabled(true)
+                dynamicsManager?.setEnabled(true)
+            }
         }
         _aiExplanation.value = "تنظیمات بر اساس: $prompt"
     }
 
-    fun clearAiExplanation() { _aiExplanation.value = null }
+    private fun applyAiFromReflection(result: Any) {
+        try {
+            val cls = result.javaClass
+            val speed = cls.getMethod("getSpeed").invoke(result) as? Float ?: 1.0f
+            val pitch = cls.getMethod("getPitch").invoke(result) as? Float ?: 1.0f
+            val bassBoost = cls.getMethod("getBassBoost").invoke(result) as? Boolean ?: false
+            val virtualizer = cls.getMethod("getVirtualizer").invoke(result) as? Boolean ?: false
+            val reverb = cls.getMethod("getReverb").invoke(result) as? Boolean ?: false
+            val reverbPreset = cls.getMethod("getReverbPreset").invoke(result) as? Int ?: 3
+            val dynamics = cls.getMethod("getDynamics").invoke(result) as? Boolean ?: false
+            val explanation = cls.getMethod("getExplanation").invoke(result) as? String ?: ""
 
-    // ============ ضبط ============
-    fun startRecording(projection: MediaProjection) {
-        _isRecording.value = true
-        _isRecordingPaused.value = false
-        _recordingSeconds.value = 0
-        _lastSavedUri.value = null
-        _recordingError.value = null
+            setCustomSpeed(speed)
+            setPitch(pitch)
 
-        recordJob = viewModelScope.launch {
-            var sec = 0
-            while (_isRecording.value) {
-                delay(1000)
-                if (!_isRecordingPaused.value) {
-                    sec++
-                    _recordingSeconds.value = sec
-                }
-            }
+            _isBassBoostEnabled.value = bassBoost
+            effectsManager?.setBassBoostEnabled(bassBoost)
+
+            _is8DEnabled.value = virtualizer
+            effectsManager?.setVirtualizerEnabled(virtualizer)
+
+            _isReverbEnabled.value = reverb
+            if (reverb) effectsManager?.setReverbEnabled(true, reverbPreset.toShort())
+            else effectsManager?.setReverbEnabled(false)
+
+            _isDynamicsEnabled.value = dynamics
+            dynamicsManager?.setEnabled(dynamics)
+
+            _aiExplanation.value = explanation
+        } catch (e: Exception) {
+            _aiExplanation.value = "خطا: ${e.message}"
         }
     }
 
-    fun pauseRecording() { _isRecordingPaused.value = true }
+    fun clearAiExplanation() { _aiExplanation.value = null }
 
-    fun resumeRecording() { _isRecordingPaused.value = false }
-
-    fun stopRecording() {
-        _isRecording.value = false
-        _isRecordingPaused.value = false
-        recordJob?.cancel()
-        // TODO: اینجا اکسپورت واقعی وصل شود
-        _lastSavedUri.value = "/storage/emulated/0/Music/RemixLab/output.mp3"
-    }
-
-    fun clearRecordingError() { _recordingError.value = null }
-
-    // ============ Export Settings ============
     fun setExportQuality(quality: Int) { _exportQuality.value = quality }
     fun setOutputFileName(name: String) { _outputFileName.value = name }
     fun setOutputTitle(title: String) { _outputTitle.value = title }
     fun setOutputArtist(artist: String) { _outputArtist.value = artist }
 
-    // ============ جستجو ============
+    fun startRecording(projection: MediaProjection) {
+        _lastSavedUri.value = null
+        _recordingError.value = null
+        val ok = audioExporter.startRecording(projection)
+        _isRecording.value = ok
+        _isRecordingPaused.value = false
+        _recordingSeconds.value = 0
+    }
+
+    fun pauseRecording() { _isRecordingPaused.value = true }
+    fun resumeRecording() { _isRecordingPaused.value = false }
+
+    fun stopRecording() {
+        audioExporter.stopRecording()
+        _isRecording.value = false
+        _isRecordingPaused.value = false
+    }
+
+    fun clearRecordingError() { _recordingError.value = null }
+    fun clearLastSaved() { _lastSavedUri.value = null }
+
     fun updateSearchQuery(q: String) {
         _searchQuery.value = q
         if (q.length >= 2) searchSongs(q) else _searchResults.value = emptyList()
@@ -288,15 +418,20 @@ class PlayerViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 }
             }
-        } catch (e: Exception) { e.printStackTrace() }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
         return list
     }
 
     override fun onCleared() {
         super.onCleared()
         progressJob?.cancel()
-        recordJob?.cancel()
         player.release()
+        effectsManager?.release()
+        dynamicsManager?.release()
+        ambientManager.release()
+        audioExporter.release()
     }
 }
 
