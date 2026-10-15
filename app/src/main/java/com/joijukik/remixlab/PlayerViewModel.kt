@@ -42,7 +42,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val audioExporter = AudioExporter(application)
     private val ambientManager = AmbientSoundManager()
 
-    // ─── State های اصلی ───
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
@@ -82,7 +81,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _exportQuality = MutableStateFlow(320)
     val exportQuality: StateFlow<Int> = _exportQuality
 
-    // 🎯 State های جدید برای نام‌گذاری و متادیتا
     private val _outputFileName = MutableStateFlow("")
     val outputFileName: StateFlow<String> = _outputFileName
 
@@ -92,7 +90,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _outputArtist = MutableStateFlow("RemixLab")
     val outputArtist: StateFlow<String> = _outputArtist
 
-    // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
@@ -108,7 +105,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
-    // ─── State های افکت محیطی ───
     private val _activeAmbient = MutableStateFlow<AmbientSoundManager.SoundType?>(null)
     val activeAmbient: StateFlow<AmbientSoundManager.SoundType?> = _activeAmbient
 
@@ -183,7 +179,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
-    // 🎯 متدهای جدید برای نام‌گذاری
     fun setOutputFileName(name: String) {
         _outputFileName.value = name
     }
@@ -202,7 +197,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         player.play()
         val fileName = getFileName(uri)
         _songName.value = fileName
-        // 🎯 پیشنهاد نام پیش‌فرض برای خروجی
         val baseName = fileName.substringBeforeLast(".")
         _outputFileName.value = "${baseName}_Remix"
         _outputTitle.value = "${baseName} (Remix)"
@@ -380,7 +374,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _recordingSeconds.value = 0L
         _isRecordingPaused.value = false
 
-        // 🎯 ارسال متادیتا به AudioExporter
         audioExporter.setMetadata(
             fileName = _outputFileName.value,
             title = _outputTitle.value,
