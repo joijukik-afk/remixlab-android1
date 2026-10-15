@@ -85,6 +85,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val exportQuality by viewModel.exportQuality.collectAsState()
 
     val isRecording by viewModel.isRecording.collectAsState()
+    val isRecordingPaused by viewModel.isRecordingPaused.collectAsState()
     val recordingSeconds by viewModel.recordingSeconds.collectAsState()
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
@@ -105,7 +106,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    // 🎯 حالا پس از برگشت نتیجه، سرویس رو متوقف می‌کنیم
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -114,10 +114,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 result.resultCode, result.data!!
             )
             viewModel.startRecording(projection)
-        } else {
-            // اگه کاربر لغو کرد، سرویس رو ببند
-            val stopIntent = Intent(context, MediaProjectionService::class.java)
-            context.stopService(stopIntent)
         }
     }
 
@@ -135,7 +131,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -161,7 +156,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // ─── نمایش اسم آهنگ و نوار پیشرفت ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -169,10 +163,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             )
         ) {
             Column(modifier = Modifier.padding(16.dp)) {
-                Text(
-                    text = "🎶 در حال پخش:",
-                    style = MaterialTheme.typography.bodySmall
-                )
+                Text(text = "🎶 در حال پخش:", style = MaterialTheme.typography.bodySmall)
                 Spacer(modifier = Modifier.height(4.dp))
                 Text(
                     text = songName,
@@ -204,7 +195,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── پنل AI ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -284,7 +274,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -330,7 +319,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── کنترل‌های دستی ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -367,7 +355,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── افکت‌ها ───
         Text(
             text = "افکت‌ها",
             style = MaterialTheme.typography.titleMedium,
@@ -430,7 +417,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // ─── بخش ضبط ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -472,12 +458,21 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 Spacer(modifier = Modifier.height(12.dp))
 
                 if (isRecording) {
-                    Text(
-                        text = "⏺️ در حال ضبط... ${formatTime(recordingSeconds)}",
-                        style = MaterialTheme.typography.bodyLarge,
-                        color = MaterialTheme.colorScheme.error,
-                        fontWeight = FontWeight.Bold
-                    )
+                    if (isRecordingPaused) {
+                        Text(
+                            text = "⏸ ضبط موقتاً متوقف شده (${formatTime(recordingSeconds)})",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.tertiary,
+                            fontWeight = FontWeight.Bold
+                        )
+                    } else {
+                        Text(
+                            text = "⏺️ در حال ضبط... ${formatTime(recordingSeconds)}",
+                            style = MaterialTheme.typography.bodyLarge,
+                            color = MaterialTheme.colorScheme.error,
+                            fontWeight = FontWeight.Bold
+                        )
+                    }
                 } else if (lastSavedUri != null) {
                     Text(
                         text = "✅ ذخیره شد!",
@@ -528,15 +523,53 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
                 Spacer(modifier = Modifier.height(12.dp))
 
-                // 🎯 دکمه شروع ضبط با ترتیب صحیح
-                Button(
-                    onClick = {
-                        if (isRecording) {
-                            viewModel.stopRecording()
-                        } else {
+                if (isRecording) {
+                    Row(
+                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                        modifier = Modifier.fillMaxWidth()
+                    ) {
+                        Button(
+                            onClick = {
+                                if (isRecordingPaused) {
+                                    viewModel.resumeRecording()
+                                } else {
+                                    viewModel.pauseRecording()
+                                }
+                            },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.tertiary
+                            )
+                        ) {
+                            Text(
+                                text = if (isRecordingPaused) "▶️ ادامه ضبط" else "⏸ توقف موقت",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+
+                        Button(
+                            onClick = { viewModel.stopRecording() },
+                            modifier = Modifier
+                                .weight(1f)
+                                .height(56.dp),
+                            colors = ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error
+                            )
+                        ) {
+                            Text(
+                                text = "⏹ توقف کامل",
+                                style = MaterialTheme.typography.titleMedium
+                            )
+                        }
+                    }
+                } else {
+                    Button(
+                        onClick = {
                             viewModel.clearRecordingError()
 
-                            // قدم ۱: اول سرویس رو شروع کن
+                            // 🎯 گام ۱: سرویس رو اول شروع کن
                             val serviceIntent = Intent(context, MediaProjectionService::class.java)
                             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                                 context.startForegroundService(serviceIntent)
@@ -544,33 +577,32 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                                 context.startService(serviceIntent)
                             }
 
-                            // قدم ۲: نیم ثانیه صبر کن، بعد دیالوگ رو نشون بده
+                            // 🎯 گام ۲: انتظار کافی برای اینکه سرویس کاملاً بالا بیاد
+                            // حالا که سرویس در onCreate شروع میشه، مطمئنیم که در حال اجراست
+                            // با این حال، یک تأخیر کوچک برای اطمینان لازمه
                             Handler(Looper.getMainLooper()).postDelayed({
+                                // 🎯 گام ۳: حالا دیالوگ ضبط رو نشون بده
                                 projectionLauncher.launch(
                                     projectionManager.createScreenCaptureIntent()
                                 )
-                            }, 500)
-                        }
-                    },
-                    modifier = Modifier.fillMaxWidth(),
-                    colors = ButtonDefaults.buttonColors(
-                        containerColor = if (isRecording)
-                            MaterialTheme.colorScheme.error
-                        else
-                            MaterialTheme.colorScheme.primary
-                    )
-                ) {
-                    Text(
-                        text = if (isRecording) "⏹ توقف ضبط" else "⏺️ شروع ضبط",
-                        style = MaterialTheme.typography.titleMedium
-                    )
+                            }, 500) // ۵۰۰ میلی‌ثانیه کافیه چون سرویس از قبل شروع شده
+                        },
+                        modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.primary
+                        )
+                    ) {
+                        Text(
+                            text = "⏺️ شروع ضبط",
+                            style = MaterialTheme.typography.titleMedium
+                        )
+                    }
                 }
             }
         }
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
@@ -578,7 +610,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                 .height(56.dp)
         ) {
             Text(
-                text = if (isPlaying) "⏸ توقف" else "▶️ پخش",
+                text = if (isPlaying) "⏸ توقف موقت" else "▶️ پخش",
                 style = MaterialTheme.typography.titleLarge
             )
         }
