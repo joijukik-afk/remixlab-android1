@@ -1,0 +1,10 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="108dp"
+    android:height="108dp"
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <!-- نت موسیقی -->
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M66,28 L66,66 C66,71 62,75 56,75 C50,75 46,71 46,66 C46,61 50,57 56,57 C57.5,57 58.8,57.3 60,57.8 L60,36 L78,32 L78,60 C78,65 74,69 68,69 C62,69 58,65 58,60 C58,55 62,51 68,51 C69.5,51 70.8,51.3 72,51.8 L72,30 L66,28 Z" />
+</vector>
