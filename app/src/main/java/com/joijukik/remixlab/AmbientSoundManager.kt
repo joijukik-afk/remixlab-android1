@@ -8,14 +8,9 @@ import kotlin.math.PI
 import kotlin.math.sin
 import kotlin.random.Random
 
-/**
- * تولیدکننده صدای محیطی بدون نیاز به فایل صوتی.
- */
 class AmbientSoundManager {
 
-    enum class SoundType {
-        RAIN, WIND, THUNDER, FOREST, CAFE
-    }
+    enum class SoundType { RAIN, WIND, THUNDER, FOREST, CAFE }
 
     private var audioTrack: AudioTrack? = null
     private var job: Job? = null
@@ -57,10 +52,7 @@ class AmbientSoundManager {
             .build()
 
         audioTrack?.play()
-
-        job = scope.launch {
-            generateLoop()
-        }
+        job = scope.launch { generateLoop() }
     }
 
     private suspend fun generateLoop() {
@@ -83,8 +75,7 @@ class AmbientSoundManager {
                     }
                     SoundType.THUNDER -> {
                         pink = pink * 0.95 + white * 0.05
-                        val rumble = if (Random.nextInt(5000) == 0)
-                            sin(i.toDouble()) * 0.5 else 0.0
+                        val rumble = if (Random.nextInt(5000) == 0) sin(i.toDouble()) * 0.5 else 0.0
                         pink * 0.25 + rumble * 0.4
                     }
                     SoundType.FOREST -> {
@@ -108,24 +99,16 @@ class AmbientSoundManager {
         }
     }
 
-    fun setVolume(v: Float) {
-        volume = v.coerceIn(0f, 1f)
-    }
+    fun setVolume(v: Float) { volume = v.coerceIn(0f, 1f) }
 
     fun stop() {
         isRunning = false
         job?.cancel()
         job = null
-        try {
-            audioTrack?.stop()
-            audioTrack?.release()
-        } catch (_: Exception) {}
+        try { audioTrack?.stop(); audioTrack?.release() } catch (_: Exception) {}
         audioTrack = null
         currentType = null
     }
 
-    fun release() {
-        stop()
-        scope.cancel()
-    }
+    fun release() { stop(); scope.cancel() }
 }
