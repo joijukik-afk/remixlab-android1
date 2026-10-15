@@ -54,6 +54,10 @@ dependencies {
     implementation("androidx.media3:media3-exoplayer:1.2.0")
     implementation("androidx.media3:media3-common:1.2.0")
 
-    // 🎯 کتابخانه LAME برای انکود MP3
-    implementation("com.github.NorthernCaptain:TAndroidLame:1.1")
+    // 🎯 کتابخانه LAME برای انکود MP3 - با حذف support-v4 قدیمی
+    implementation("com.github.NorthernCaptain:TAndroidLame:1.1") {
+        exclude(group = "com.android.support", module = "support-v4")
+        exclude(group = "com.android.support", module = "support-compat")
+        exclude(group = "com.android.support", module = "support-core-utils")
+    }
 }
