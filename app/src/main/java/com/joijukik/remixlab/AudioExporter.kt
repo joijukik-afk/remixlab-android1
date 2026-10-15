@@ -39,12 +39,10 @@ class AudioExporter(private val context: Context) {
     private val channelCount = 2
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
-    // 🎯 برای محاسبه زمان دقیق
     private var startTimeMs: Long = 0
     private var pausedDurationMs: Long = 0
     private var pauseStartMs: Long = 0
 
-    // 🎯 متادیتا
     private var customFileName: String = ""
     private var customTitle: String = ""
     private var customArtist: String = "RemixLab"
@@ -184,6 +182,7 @@ class AudioExporter(private val context: Context) {
 
                     if (bytesEncoded > 0) {
                         outputStream.write(mp3Buffer, 0, bytesEncoded)
+
                         val now = SystemClock.elapsedRealtime()
                         val totalPausedMs = pausedDurationMs +
                                 (if (isPaused && pauseStartMs > 0) (now - pauseStartMs) else 0)
@@ -207,7 +206,6 @@ class AudioExporter(private val context: Context) {
     }
 
     private fun saveMp3ToMediaStore(mp3File: File) {
-        // 🎯 استفاده از نام سفارشی یا نام پیش‌فرض
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = if (customFileName.isNotBlank()) {
             if (customFileName.endsWith(".mp3")) customFileName
@@ -221,7 +219,6 @@ class AudioExporter(private val context: Context) {
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            // 🎯 اضافه کردن متادیتا
             put(MediaStore.Audio.Media.TITLE, title)
             put(MediaStore.Audio.Media.ARTIST, customArtist)
             put(MediaStore.Audio.Media.ALBUM, "RemixLab")
@@ -231,7 +228,6 @@ class AudioExporter(private val context: Context) {
 
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 put(MediaStore.Audio.Media.RELATIVE_PATH, "${Environment.DIRECTORY_MUSIC}/RemixLab")
-                // 🎯 IS_PENDING = 1 یعنی فایل در حال نوشتنه و بقیه اپ‌ها نبیننش
                 put(MediaStore.Audio.Media.IS_PENDING, 1)
             }
         }
