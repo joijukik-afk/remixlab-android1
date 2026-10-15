@@ -78,21 +78,21 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val lastSavedUri by viewModel.lastSavedUri.collectAsState()
     val recordingError by viewModel.recordingError.collectAsState()
 
-    // درخواست مجوز READ_MEDIA_AUDIO
+    // ─── درخواست مجوز READ_MEDIA_AUDIO ───
     val audioPermissionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.RequestPermission()
     ) { _ ->
         // مجوز داده یا رد شد
     }
 
-    // انتخاب آهنگ
+    // ─── انتخاب آهنگ ───
     val audioPicker = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.GetContent()
     ) { uri: Uri? ->
         uri?.let { viewModel.loadSong(it) }
     }
 
-    // درخواست MediaProjection
+    // ─── درخواست MediaProjection ───
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
@@ -116,13 +116,13 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     ) {
         Spacer(modifier = Modifier.height(16.dp))
 
-        // عنوان
+        // ─── عنوان ───
         Text(text = "RemixLab", style = MaterialTheme.typography.headlineLarge)
         Spacer(modifier = Modifier.height(8.dp))
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
-        // دکمه انتخاب آهنگ (با درخواست مجوز)
+        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -148,7 +148,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // پنل COMA AUDIO LAB
+        // ─── پنل COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -194,7 +194,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // کنترل‌های دستی
+        // ─── کنترل‌های دستی ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -231,7 +231,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // افکت‌ها
+        // ─── افکت‌ها ───
         Text(
             text = "افکت‌ها",
             style = MaterialTheme.typography.titleMedium,
@@ -294,7 +294,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
-        // بخش ضبط
+        // ─── بخش ضبط MP3 ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -401,7 +401,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
-        // دکمه پخش/توقف
+        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
@@ -446,7 +446,7 @@ private fun formatTime(seconds: Long): String {
 private fun shareAudio(context: Context, uri: Uri) {
     try {
         val shareIntent = Intent(Intent.ACTION_SEND).apply {
-            type = "audio/mpeg" // ← MP3 MIME type
+            type = "audio/mpeg" // 👈 MP3 MIME type
             putExtra(Intent.EXTRA_STREAM, uri)
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
@@ -460,7 +460,7 @@ private fun shareAudio(context: Context, uri: Uri) {
 private fun playAudio(context: Context, uri: Uri) {
     try {
         val playIntent = Intent(Intent.ACTION_VIEW).apply {
-            setDataAndType(uri, "audio/mpeg") // ← MP3 MIME type
+            setDataAndType(uri, "audio/mpeg") // 👈 MP3 MIME type
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         context.startActivity(Intent.createChooser(playIntent, "پخش ریمیکس"))
