@@ -82,6 +82,17 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _exportQuality = MutableStateFlow(320)
     val exportQuality: StateFlow<Int> = _exportQuality
 
+    // 🎯 State های جدید برای نام‌گذاری و متادیتا
+    private val _outputFileName = MutableStateFlow("")
+    val outputFileName: StateFlow<String> = _outputFileName
+
+    private val _outputTitle = MutableStateFlow("")
+    val outputTitle: StateFlow<String> = _outputTitle
+
+    private val _outputArtist = MutableStateFlow("RemixLab")
+    val outputArtist: StateFlow<String> = _outputArtist
+
+    // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
@@ -97,6 +108,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
+    // ─── State های افکت محیطی ───
     private val _activeAmbient = MutableStateFlow<AmbientSoundManager.SoundType?>(null)
     val activeAmbient: StateFlow<AmbientSoundManager.SoundType?> = _activeAmbient
 
@@ -131,8 +143,8 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             }
         }
 
-        audioExporter.onProgress = { bytes ->
-            _recordingSeconds.value = bytes / (48000L * 4L)
+        audioExporter.onProgress = { seconds ->
+            _recordingSeconds.value = seconds
         }
         audioExporter.onFinish = { uri ->
             _lastSavedUri.value = uri
@@ -171,11 +183,29 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
+    // 🎯 متدهای جدید برای نام‌گذاری
+    fun setOutputFileName(name: String) {
+        _outputFileName.value = name
+    }
+
+    fun setOutputTitle(title: String) {
+        _outputTitle.value = title
+    }
+
+    fun setOutputArtist(artist: String) {
+        _outputArtist.value = artist
+    }
+
     fun loadSong(uri: Uri) {
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.play()
-        _songName.value = getFileName(uri)
+        val fileName = getFileName(uri)
+        _songName.value = fileName
+        // 🎯 پیشنهاد نام پیش‌فرض برای خروجی
+        val baseName = fileName.substringBeforeLast(".")
+        _outputFileName.value = "${baseName}_Remix"
+        _outputTitle.value = "${baseName} (Remix)"
     }
 
     private fun getFileName(uri: Uri): String {
@@ -349,6 +379,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _lastSavedUri.value = null
         _recordingSeconds.value = 0L
         _isRecordingPaused.value = false
+
+        // 🎯 ارسال متادیتا به AudioExporter
+        audioExporter.setMetadata(
+            fileName = _outputFileName.value,
+            title = _outputTitle.value,
+            artist = _outputArtist.value
+        )
 
         if (!_isDynamicsEnabled.value) {
             _isDynamicsEnabled.value = true
