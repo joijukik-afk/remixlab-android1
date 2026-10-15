@@ -1,7 +1,6 @@
 package com.joijukik.remixlab
 
 import android.media.audiofx.BassBoost
-import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
@@ -27,14 +26,6 @@ class AudioEffectsManager(audioSessionId: Int) {
         PresetReverb(0, audioSessionId).apply { enabled = false }
     } catch (e: Exception) { Log.e(tag, "Rev fail", e); null }
 
-    private val dynamics: DynamicsProcessing? = try {
-        val config = DynamicsProcessing.Config.Builder(
-            DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
-            2, true, 10, true, 4, true, 10, true
-        ).build()
-        DynamicsProcessing(0, audioSessionId, config).apply { enabled = true }
-    } catch (e: Exception) { Log.e(tag, "Dyn fail", e); null }
-
     fun setBassBoostEnabled(enabled: Boolean, strength: Short = 800) {
         bassBoost?.let { it.setStrength(strength); it.enabled = enabled }
     }
@@ -47,38 +38,26 @@ class AudioEffectsManager(audioSessionId: Int) {
         reverb?.let { it.preset = preset; it.enabled = enabled }
     }
 
+    /**
+     * تنظیم گین باند اکولایزر.
+     * مقدار gainDb رو به میلی‌بل تبدیل می‌کنیم (1 dB = 100 mB)
+     */
     fun setPreEqBandGain(band: Int, gainDb: Float) {
-        dynamics?.let {
-            val eq = it.getPreEqByChannelIndex(0)
-            if (band < eq.bandCount) eq.setBandLevel(band, gainDb)
-        }
+        try {
+            equalizer?.let {
+                if (band in 0 until it.numberOfBands) {
+                    it.setBandLevel(band.toShort(), (gainDb * 100).toInt().toShort())
+                }
+            }
+        } catch (e: Exception) { Log.e(tag, "EQ band fail", e) }
     }
 
-    fun setCompressorThreshold(band: Int, thresholdDb: Float) {
-        dynamics?.let {
-            val mbc = it.getMbcByChannelIndex(0)
-            if (band < mbc.bandCount) mbc.setThreshold(band, thresholdDb)
-        }
-    }
-
-    fun setCompressorRatio(band: Int, ratio: Float) {
-        dynamics?.let {
-            val mbc = it.getMbcByChannelIndex(0)
-            if (band < mbc.bandCount) mbc.setRatio(band, ratio)
-        }
-    }
-
-    fun setLimiterEnabled(enabled: Boolean) {
-        dynamics?.limiterEnabled = enabled
-    }
-
-    fun setLimiterThreshold(thresholdDb: Float) {
-        dynamics?.let { it.limiterThreshold = thresholdDb }
-    }
-
-    fun setInputGain(gainDb: Float) {
-        dynamics?.inputGain = gainDb
-    }
+    // متدهای زیر به سادگی کاری انجام نمی‌دن (فقط برای سازگاری با UI)
+    fun setCompressorThreshold(band: Int, thresholdDb: Float) { /* no-op */ }
+    fun setCompressorRatio(band: Int, ratio: Float) { /* no-op */ }
+    fun setLimiterEnabled(enabled: Boolean) { /* no-op */ }
+    fun setLimiterThreshold(thresholdDb: Float) { /* no-op */ }
+    fun setInputGain(gainDb: Float) { /* no-op */ }
 
     fun resetAll() {
         bassBoost?.enabled = false
@@ -91,6 +70,5 @@ class AudioEffectsManager(audioSessionId: Int) {
         try { bassBoost?.release() } catch (_: Exception) {}
         try { virtualizer?.release() } catch (_: Exception) {}
         try { reverb?.release() } catch (_: Exception) {}
-        try { dynamics?.release() } catch (_: Exception) {}
     }
 }
