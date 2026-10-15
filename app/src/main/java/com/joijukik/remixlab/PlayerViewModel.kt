@@ -4,7 +4,9 @@ import android.app.Application
 import android.media.audiofx.PresetReverb
 import android.media.projection.MediaProjection
 import android.net.Uri
+import android.provider.OpenableColumns
 import androidx.lifecycle.AndroidViewModel
+import androidx.lifecycle.viewModelScope
 import androidx.media3.common.AudioAttributes
 import androidx.media3.common.C
 import androidx.media3.common.MediaItem
@@ -12,22 +14,17 @@ import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
 import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.launch
 
 class PlayerViewModel(application: Application) : AndroidViewModel(application) {
 
-    // --- LoadControl برای بافر بزرگ‌تر ---
     private val loadControl = DefaultLoadControl.Builder()
-        .setBufferDurationsMs(
-            50000,  // minBufferMs
-            50000,  // maxBufferMs
-            2500,   // bufferForPlaybackMs
-            5000    // bufferForPlaybackAfterRebufferMs
-        )
+        .setBufferDurationsMs(50000, 50000, 2500, 5000)
         .build()
 
-    // --- Player ---
     val player: ExoPlayer = ExoPlayer.Builder(application)
         .setLoadControl(loadControl)
         .setAudioAttributes(
@@ -73,6 +70,20 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
     val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
+    // ─── State های پخش (جدید) ───
+    private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
+    val songName: StateFlow<String> = _songName
+
+    private val _currentPosition = MutableStateFlow(0L)
+    val currentPosition: StateFlow<Long> = _currentPosition
+
+    private val _duration = MutableStateFlow(0L)
+    val duration: StateFlow<Long> = _duration
+
+    // ─── کیفیت MP3 (جدید) ───
+    private val _exportQuality = MutableStateFlow(320)
+    val exportQuality: StateFlow<Int> = _exportQuality
+
     // ─── State های ضبط ───
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
@@ -106,9 +117,21 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_READY) {
                     setupEffects(player.audioSessionId)
+                    _duration.value = player.duration.coerceAtLeast(0)
                 }
             }
         })
+
+        // ─── به‌روزرسانی موقعیت پخش هر ۵۰۰ میلی‌ثانیه ───
+        viewModelScope.launch {
+            while (true) {
+                if (player.isPlaying) {
+                    _currentPosition.value = player.currentPosition
+                    _duration.value = player.duration.coerceAtLeast(0)
+                }
+                delay(500)
+            }
+        }
 
         // کالبک‌های ضبط
         audioExporter.onProgress = { bytes ->
@@ -127,7 +150,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private fun setupEffects(audioSessionId: Int) {
         if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
 
-        // ─── Effects Manager (Reverb, BassBoost, Virtualizer, Equalizer) ───
         effectsManager?.release()
         effectsManager = try {
             AudioEffectsManager(audioSessionId)
@@ -140,7 +162,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
         effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
 
-        // ─── Dynamics Processor ───
         dynamicsManager?.release()
         dynamicsManager = try {
             DynamicsProcessorManager(audioSessionId)
@@ -156,6 +177,36 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         player.setMediaItem(MediaItem.fromUri(uri))
         player.prepare()
         player.play()
+        _songName.value = getFileName(uri)
+    }
+
+    // ─── گرفتن اسم فایل ───
+    private fun getFileName(uri: Uri): String {
+        var name = "آهنگ ناشناخته"
+        try {
+            getApplication<Application>().contentResolver.query(
+                uri, null, null, null, null
+            )?.use { cursor ->
+                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
+                if (cursor.moveToFirst() && nameIndex >= 0) {
+                    name = cursor.getString(nameIndex)
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return name
+    }
+
+    // ─── پرش به موقعیت (Seek) ───
+    fun seekTo(positionMs: Long) {
+        player.seekTo(positionMs)
+        _currentPosition.value = positionMs
+    }
+
+    // ─── تنظیم کیفیت MP3 ───
+    fun setExportQuality(kbps: Int) {
+        _exportQuality.value = kbps
     }
 
     // ─── Slowed ───
@@ -164,7 +215,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         if (_isSlowed.value) setSpeedInternal(0.8f) else setSpeedInternal(1.0f)
     }
 
-    // ─── سرعت ───
     fun setCustomSpeed(speed: Float) {
         setSpeedInternal(speed)
     }
@@ -175,7 +225,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         applyPlaybackParameters()
     }
 
-    // ─── گام (Pitch) ───
     fun setPitch(pitch: Float) {
         _currentPitch.value = pitch
         applyPlaybackParameters()
@@ -248,17 +297,13 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── اعمال تنظیمات دستیار AI ───
+    // ─── اعمال تنظیمات AI ───
     fun applyAiTuning(result: AiTuningAssistant.TuningResult) {
-        // ۱. سرعت
         _currentSpeed.value = result.speed
         _isSlowed.value = result.speed < 1.0f
-
-        // ۲. گام
         _currentPitch.value = result.pitch
         applyPlaybackParameters()
 
-        // ۳. Reverb
         if (result.reverb && result.reverbPreset != null) {
             _isReverbEnabled.value = true
             _currentReverbPreset.value = result.reverbPreset
@@ -268,19 +313,15 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             effectsManager?.setReverbEnabled(false)
         }
 
-        // ۴. Bass Boost
         _isBassBoostEnabled.value = result.bassBoost
         effectsManager?.setBassBoostEnabled(result.bassBoost)
 
-        // ۵. 8D
         _is8DEnabled.value = result.virtualizer
         effectsManager?.setVirtualizerEnabled(result.virtualizer)
 
-        // ۶. Dynamics
         _isDynamicsEnabled.value = result.dynamics
         dynamicsManager?.setEnabled(result.dynamics)
 
-        // ۷. افکت محیطی
         ambientManager.stop()
         if (result.ambientSound != null) {
             _ambientVolume.value = result.ambientVolume
@@ -291,7 +332,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    // ─── افکت‌های محیطی (دستی) ───
+    // ─── افکت‌های محیطی ───
     fun toggleAmbient(type: AmbientSoundManager.SoundType) {
         if (_activeAmbient.value == type) {
             ambientManager.stop()
@@ -328,7 +369,10 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
             dynamicsManager?.setEnabled(true)
         }
 
-        val started = audioExporter.startRecording(mediaProjection)
+        val started = audioExporter.startRecording(
+            mediaProjection,
+            bitRate = _exportQuality.value * 1024
+        )
         if (started) {
             _isRecording.value = true
             if (!player.isPlaying) player.play()
@@ -346,7 +390,6 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _recordingError.value = null
     }
 
-    // ─── آزادسازی ───
     override fun onCleared() {
         super.onCleared()
         if (_isRecording.value) audioExporter.stopRecording()
