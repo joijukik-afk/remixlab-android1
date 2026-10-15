@@ -7,114 +7,79 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import com.joijukik.remixlab.navigation.Routes
 
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun HomeScreen(
-    onNavigate: (String) -> Unit
-) {
+fun HomeScreen(onNavigateToEditor: () -> Unit) {
     Column(
         modifier = Modifier
             .fillMaxSize()
-            .verticalScroll(rememberScrollState())
             .padding(24.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.Center
     ) {
-        Spacer(modifier = Modifier.height(48.dp))
-
+        Text(
+            text = "🎧",
+            style = MaterialTheme.typography.displayLarge
+        )
+        Spacer(modifier = Modifier.height(16.dp))
         Text(
             text = "RemixLab",
-            style = MaterialTheme.typography.displayMedium,
+            style = MaterialTheme.typography.displaySmall,
             fontWeight = FontWeight.Bold,
             color = MaterialTheme.colorScheme.primary
         )
-
         Spacer(modifier = Modifier.height(8.dp))
-
         Text(
-            text = "استودیوی ریمیکس توی جیبت",
+            text = "استودیوی ریمیکس در جیب شما",
             style = MaterialTheme.typography.bodyLarge,
+            textAlign = TextAlign.Center,
             color = MaterialTheme.colorScheme.onSurfaceVariant
         )
-
-        Spacer(modifier = Modifier.height(64.dp))
-
-        MenuCard(
-            title = "🎵 شروع ریمیکس",
-            description = "آهنگت رو انتخاب کن و ریمیکس بساز",
-            onClick = { onNavigate(Routes.EDITOR) }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        MenuCard(
-            title = "🎛️ کتابخانه پریست‌ها",
-            description = "پریست‌های آماده کمایی و تاریک",
-            onClick = { onNavigate(Routes.PRESETS) }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        MenuCard(
-            title = "⚙️ تنظیمات",
-            description = "تنظیمات برنامه و کیفیت خروجی",
-            onClick = { onNavigate(Routes.SETTINGS) }
-        )
-
-        Spacer(modifier = Modifier.height(16.dp))
-
-        MenuCard(
-            title = "ℹ️ درباره RemixLab",
-            description = "اطلاعات و راهنما",
-            onClick = { onNavigate(Routes.ABOUT) }
-        )
-
         Spacer(modifier = Modifier.height(48.dp))
-    }
-}
 
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun MenuCard(
-    title: String,
-    description: String,
-    onClick: () -> Unit
-) {
-    Card(
-        modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(
-            containerColor = MaterialTheme.colorScheme.surfaceVariant
-        ),
-        onClick = onClick
-    ) {
-        Column(
+        Card(
+            modifier = Modifier.fillMaxWidth(),
+            colors = CardDefaults.cardColors(
+                containerColor = MaterialTheme.colorScheme.secondaryContainer
+            )
+        ) {
+            Column(modifier = Modifier.padding(16.dp)) {
+                Text(
+                    text = "✨ امکانات نسخه ۲",
+                    style = MaterialTheme.typography.titleMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Spacer(modifier = Modifier.height(8.dp))
+                Text("• میکس چند آهنگ همزمان", style = MaterialTheme.typography.bodyMedium)
+                Text("• حذف خواننده و بیت (AI)", style = MaterialTheme.typography.bodyMedium)
+                Text("• اکولایزر ۱۰ باندی حرفه‌ای", style = MaterialTheme.typography.bodyMedium)
+                Text("• کمپرسور چندباندی و لیمیتر", style = MaterialTheme.typography.bodyMedium)
+                Text("• پریست‌های COMA Audio Lab", style = MaterialTheme.typography.bodyMedium)
+            }
+        }
+
+        Spacer(modifier = Modifier.height(32.dp))
+
+        Button(
+            onClick = onNavigateToEditor,
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(20.dp)
+                .height(60.dp)
         ) {
             Text(
-                text = title,
-                style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold
-            )
-            Spacer(modifier = Modifier.height(4.dp))
-            Text(
-                text = description,
-                style = MaterialTheme.typography.bodyMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                text = "شروع ریمیکس",
+                style = MaterialTheme.typography.titleLarge
             )
         }
     }
