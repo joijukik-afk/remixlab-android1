@@ -1,52 +1,63 @@
-package com.joijukik.remixlab
+package com.remixlab.app
 
 import android.app.Application
+import android.content.ContentUris
 import android.media.audiofx.PresetReverb
 import android.media.projection.MediaProjection
 import android.net.Uri
-import android.provider.OpenableColumns
+import android.provider.MediaStore
 import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
-import androidx.media3.common.AudioAttributes
-import androidx.media3.common.C
 import androidx.media3.common.MediaItem
 import androidx.media3.common.PlaybackParameters
 import androidx.media3.common.Player
-import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.ExoPlayer
+import com.remixlab.app.ai.AiTuningAssistant
+import com.remixlab.app.ai.TuningResult
+import com.remixlab.app.audio.AmbientSoundManager
+import com.remixlab.app.audio.AudioEffectsManager
+import com.remixlab.app.audio.AudioExporter
+import com.remixlab.app.audio.DynamicsProcessorManager
+import com.remixlab.app.data.CustomPresetStore
+import com.remixlab.app.model.AmbientType
+import com.remixlab.app.model.ComaPreset
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
-class PlayerViewModel(application: Application) : AndroidViewModel(application) {
+class PlayerViewModel(app: Application) : AndroidViewModel(app) {
 
-    private val loadControl = DefaultLoadControl.Builder()
-        .setBufferDurationsMs(50000, 50000, 2500, 5000)
-        .build()
-
-    val player: ExoPlayer = ExoPlayer.Builder(application)
-        .setLoadControl(loadControl)
-        .setAudioAttributes(
-            AudioAttributes.Builder()
-                .setUsage(C.USAGE_MEDIA)
-                .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
-                .build(),
-            true
-        )
-        .setHandleAudioBecomingNoisy(true)
-        .build()
+    val player: ExoPlayer = ExoPlayer.Builder(app).build()
 
     private var effectsManager: AudioEffectsManager? = null
     private var dynamicsManager: DynamicsProcessorManager? = null
-    private val audioExporter = AudioExporter(application)
     private val ambientManager = AmbientSoundManager()
+    val audioExporter = AudioExporter(app)
+    private val presetStore = CustomPresetStore(app)
+    private val aiAssistant = AiTuningAssistant()
+
+    // ============ State ============
+    private val _isPlaying = MutableStateFlow(false)
+    val isPlaying: StateFlow<Boolean> = _isPlaying
+
+    private val _currentSpeed = MutableStateFlow(1.0f)
+    val currentSpeed: StateFlow<Float> = _currentSpeed
+
+    private val _currentPitch = MutableStateFlow(1.0f)
+    val currentPitch: StateFlow<Float> = _currentPitch
 
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
     private val _isReverbEnabled = MutableStateFlow(false)
     val isReverbEnabled: StateFlow<Boolean> = _isReverbEnabled
+
+    private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEROOM)
+    val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
 
     private val _isBassBoostEnabled = MutableStateFlow(false)
     val isBassBoostEnabled: StateFlow<Boolean> = _isBassBoostEnabled
@@ -57,20 +68,14 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _isDynamicsEnabled = MutableStateFlow(false)
     val isDynamicsEnabled: StateFlow<Boolean> = _isDynamicsEnabled
 
-    private val _currentSpeed = MutableStateFlow(1.0f)
-    val currentSpeed: StateFlow<Float> = _currentSpeed
+    private val _activeAmbient = MutableStateFlow<AmbientType?>(null)
+    val activeAmbient: StateFlow<AmbientType?> = _activeAmbient
 
-    private val _currentPitch = MutableStateFlow(1.0f)
-    val currentPitch: StateFlow<Float> = _currentPitch
+    private val _ambientVolume = MutableStateFlow(0.4f)
+    val ambientVolume: StateFlow<Float> = _ambientVolume
 
-    private val _isPlaying = MutableStateFlow(false)
-    val isPlaying: StateFlow<Boolean> = _isPlaying
-
-    private val _currentReverbPreset = MutableStateFlow<Short>(PresetReverb.PRESET_LARGEHALL)
-    val currentReverbPreset: StateFlow<Short> = _currentReverbPreset
-
-    private val _songName = MutableStateFlow("هیچ آهنگی انتخاب نشده")
-    val songName: StateFlow<String> = _songName
+    private val _currentSongTitle = MutableStateFlow("هیچ آهنگی انتخاب نشده")
+    val currentSongTitle: StateFlow<String> = _currentSongTitle
 
     private val _currentPosition = MutableStateFlow(0L)
     val currentPosition: StateFlow<Long> = _currentPosition
@@ -78,145 +83,97 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val _duration = MutableStateFlow(0L)
     val duration: StateFlow<Long> = _duration
 
-    private val _exportQuality = MutableStateFlow(320)
-    val exportQuality: StateFlow<Int> = _exportQuality
-
-    private val _outputFileName = MutableStateFlow("")
-    val outputFileName: StateFlow<String> = _outputFileName
-
-    private val _outputTitle = MutableStateFlow("")
-    val outputTitle: StateFlow<String> = _outputTitle
-
-    private val _outputArtist = MutableStateFlow("RemixLab")
-    val outputArtist: StateFlow<String> = _outputArtist
-
     private val _isRecording = MutableStateFlow(false)
     val isRecording: StateFlow<Boolean> = _isRecording
 
-    private val _isRecordingPaused = MutableStateFlow(false)
-    val isRecordingPaused: StateFlow<Boolean> = _isRecordingPaused
+    private val _recordingSeconds = MutableStateFlow(0)
+    val recordingSeconds: StateFlow<Int> = _recordingSeconds
 
-    private val _recordingSeconds = MutableStateFlow(0L)
-    val recordingSeconds: StateFlow<Long> = _recordingSeconds
-
-    private val _lastSavedUri = MutableStateFlow<Uri?>(null)
-    val lastSavedUri: StateFlow<Uri?> = _lastSavedUri
+    private val _lastSavedPath = MutableStateFlow<String?>(null)
+    val lastSavedPath: StateFlow<String?> = _lastSavedPath
 
     private val _recordingError = MutableStateFlow<String?>(null)
     val recordingError: StateFlow<String?> = _recordingError
 
-    private val _activeAmbient = MutableStateFlow<AmbientSoundManager.SoundType?>(null)
-    val activeAmbient: StateFlow<AmbientSoundManager.SoundType?> = _activeAmbient
+    private val _searchQuery = MutableStateFlow("")
+    val searchQuery: StateFlow<String> = _searchQuery
 
-    private val _ambientVolume = MutableStateFlow(0.4f)
-    val ambientVolume: StateFlow<Float> = _ambientVolume
+    private val _searchResults = MutableStateFlow<List<SongInfo>>(emptyList())
+    val searchResults: StateFlow<List<SongInfo>> = _searchResults
+
+    private val _customPresets = MutableStateFlow<List<ComaPreset>>(emptyList())
+    val customPresets: StateFlow<List<ComaPreset>> = _customPresets
+
+    private val _aiResult = MutableStateFlow<TuningResult?>(null)
+    val aiResult: StateFlow<TuningResult?> = _aiResult
+
+    private val _aiLoading = MutableStateFlow(false)
+    val aiLoading: StateFlow<Boolean> = _aiLoading
+
+    private var progressJob: Job? = null
 
     init {
         player.addListener(object : Player.Listener {
+            override fun onAudioSessionIdChanged(audioSessionId: Int) {
+                effectsManager?.release()
+                dynamicsManager?.release()
+                effectsManager = AudioEffectsManager(audioSessionId)
+                dynamicsManager = DynamicsProcessorManager(audioSessionId)
+            }
+
             override fun onIsPlayingChanged(isPlaying: Boolean) {
                 _isPlaying.value = isPlaying
             }
 
-            override fun onAudioSessionIdChanged(audioSessionId: Int) {
-                setupEffects(audioSessionId)
-            }
-
-            override fun onPlaybackStateChanged(playbackState: Int) {
-                if (playbackState == Player.STATE_READY) {
-                    setupEffects(player.audioSessionId)
+            override fun onPlaybackStateChanged(state: Int) {
+                if (state == Player.STATE_READY) {
                     _duration.value = player.duration.coerceAtLeast(0)
+                }
+                if (state == Player.STATE_ENDED) {
+                    _isPlaying.value = false
                 }
             }
         })
 
-        viewModelScope.launch {
+        // آپدیت مداوم موقعیت پخش
+        progressJob = viewModelScope.launch {
             while (true) {
-                if (player.isPlaying) {
-                    _currentPosition.value = player.currentPosition
-                    _duration.value = player.duration.coerceAtLeast(0)
-                }
-                delay(500)
+                _currentPosition.value = player.currentPosition
+                _duration.value = player.duration.coerceAtLeast(0)
+                delay(400)
             }
         }
 
-        audioExporter.onProgress = { seconds ->
-            _recordingSeconds.value = seconds
-        }
-        audioExporter.onFinish = { uri ->
-            _lastSavedUri.value = uri
+        // تنظیمات ضبط
+        audioExporter.onProgress = { sec -> _recordingSeconds.value = sec }
+        audioExporter.onFinish = { path ->
             _isRecording.value = false
-            _isRecordingPaused.value = false
+            _lastSavedPath.value = path
         }
-        audioExporter.onError = { msg ->
-            _recordingError.value = msg
+        audioExporter.onError = { err ->
             _isRecording.value = false
-            _isRecordingPaused.value = false
-        }
-    }
-
-    private fun setupEffects(audioSessionId: Int) {
-        if (audioSessionId == 0 || audioSessionId == C.AUDIO_SESSION_ID_UNSET) return
-
-        effectsManager?.release()
-        effectsManager = try {
-            AudioEffectsManager(audioSessionId)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
+            _recordingError.value = err
         }
 
-        effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
-        effectsManager?.setBassBoostEnabled(_isBassBoostEnabled.value)
-        effectsManager?.setVirtualizerEnabled(_is8DEnabled.value)
-
-        dynamicsManager?.release()
-        dynamicsManager = try {
-            DynamicsProcessorManager(audioSessionId)
-        } catch (e: Exception) {
-            e.printStackTrace()
-            null
-        }
-        dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
+        reloadCustomPresets()
     }
 
-    fun setOutputFileName(name: String) {
-        _outputFileName.value = name
-    }
-
-    fun setOutputTitle(title: String) {
-        _outputTitle.value = title
-    }
-
-    fun setOutputArtist(artist: String) {
-        _outputArtist.value = artist
-    }
-
-    fun loadSong(uri: Uri) {
-        player.setMediaItem(MediaItem.fromUri(uri))
+    // ============ پخش ============
+    fun loadSong(uri: Uri, title: String? = null) {
+        val item = MediaItem.fromUri(uri)
+        player.setMediaItem(item)
         player.prepare()
-        player.play()
-        val fileName = getFileName(uri)
-        _songName.value = fileName
-        val baseName = fileName.substringBeforeLast(".")
-        _outputFileName.value = "${baseName}_Remix"
-        _outputTitle.value = "${baseName} (Remix)"
+        player.playWhenReady = true
+        _currentSongTitle.value = title ?: uri.lastPathSegment ?: "آهنگ ناشناخته"
     }
 
-    private fun getFileName(uri: Uri): String {
-        var name = "آهنگ ناشناخته"
-        try {
-            getApplication<Application>().contentResolver.query(
-                uri, null, null, null, null
-            )?.use { cursor ->
-                val nameIndex = cursor.getColumnIndex(OpenableColumns.DISPLAY_NAME)
-                if (cursor.moveToFirst() && nameIndex >= 0) {
-                    name = cursor.getString(nameIndex)
-                }
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun playPause() {
+        if (player.isPlaying) {
+            player.pause()
+        } else {
+            if (player.mediaItemCount == 0) return
+            player.play()
         }
-        return name
     }
 
     fun seekTo(positionMs: Long) {
@@ -224,37 +181,30 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         _currentPosition.value = positionMs
     }
 
-    fun setExportQuality(kbps: Int) {
-        _exportQuality.value = kbps
-    }
-
-    fun toggleSlowed() {
-        _isSlowed.value = !_isSlowed.value
-        if (_isSlowed.value) setSpeedInternal(0.8f) else setSpeedInternal(1.0f)
-    }
-
+    // ============ سرعت و پیچ ============
     fun setCustomSpeed(speed: Float) {
-        setSpeedInternal(speed)
-    }
-
-    private fun setSpeedInternal(speed: Float) {
         _currentSpeed.value = speed
-        _isSlowed.value = speed < 1.0f
-        applyPlaybackParameters()
+        player.playbackParameters = PlaybackParameters(speed, _currentPitch.value)
+        _isSlowed.value = speed < 0.95f
     }
 
     fun setPitch(pitch: Float) {
         _currentPitch.value = pitch
-        applyPlaybackParameters()
+        player.playbackParameters = PlaybackParameters(_currentSpeed.value, pitch)
     }
 
-    private fun applyPlaybackParameters() {
-        player.playbackParameters = PlaybackParameters(_currentSpeed.value, _currentPitch.value)
+    fun toggleSlowed() {
+        _isSlowed.value = !_isSlowed.value
+        setCustomSpeed(if (_isSlowed.value) 0.8f else 1.0f)
     }
 
+    // ============ افکت‌ها ============
     fun toggleReverb() {
         _isReverbEnabled.value = !_isReverbEnabled.value
-        effectsManager?.setReverbEnabled(_isReverbEnabled.value, _currentReverbPreset.value)
+        effectsManager?.setReverbEnabled(
+            _isReverbEnabled.value,
+            _currentReverbPreset.value
+        )
     }
 
     fun setReverbPreset(preset: Short) {
@@ -279,73 +229,9 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         dynamicsManager?.setEnabled(_isDynamicsEnabled.value)
     }
 
-    fun applyComaPreset(preset: ComaPreset) {
-        _currentSpeed.value = preset.speed
-        _isSlowed.value = preset.speed < 1.0f
-        _currentPitch.value = preset.pitch
-        applyPlaybackParameters()
-
-        if (preset.reverbPreset != null) {
-            _isReverbEnabled.value = true
-            _currentReverbPreset.value = preset.reverbPreset
-            effectsManager?.setReverbEnabled(true, preset.reverbPreset)
-        } else {
-            _isReverbEnabled.value = false
-            effectsManager?.setReverbEnabled(false)
-        }
-
-        _isBassBoostEnabled.value = preset.bassBoost
-        effectsManager?.setBassBoostEnabled(preset.bassBoost)
-
-        _is8DEnabled.value = preset.virtualizer
-        effectsManager?.setVirtualizerEnabled(preset.virtualizer)
-
-        ambientManager.stop()
-        if (preset.ambientSound != null) {
-            _ambientVolume.value = preset.ambientVolume
-            ambientManager.play(preset.ambientSound, preset.ambientVolume)
-            _activeAmbient.value = preset.ambientSound
-        } else {
-            _activeAmbient.value = null
-        }
-    }
-
-    fun applyAiTuning(result: AiTuningAssistant.TuningResult) {
-        _currentSpeed.value = result.speed
-        _isSlowed.value = result.speed < 1.0f
-        _currentPitch.value = result.pitch
-        applyPlaybackParameters()
-
-        if (result.reverb && result.reverbPreset != null) {
-            _isReverbEnabled.value = true
-            _currentReverbPreset.value = result.reverbPreset
-            effectsManager?.setReverbEnabled(true, result.reverbPreset)
-        } else {
-            _isReverbEnabled.value = false
-            effectsManager?.setReverbEnabled(false)
-        }
-
-        _isBassBoostEnabled.value = result.bassBoost
-        effectsManager?.setBassBoostEnabled(result.bassBoost)
-
-        _is8DEnabled.value = result.virtualizer
-        effectsManager?.setVirtualizerEnabled(result.virtualizer)
-
-        _isDynamicsEnabled.value = result.dynamics
-        dynamicsManager?.setEnabled(result.dynamics)
-
-        ambientManager.stop()
-        if (result.ambientSound != null) {
-            _ambientVolume.value = result.ambientVolume
-            ambientManager.play(result.ambientSound, result.ambientVolume)
-            _activeAmbient.value = result.ambientSound
-        } else {
-            _activeAmbient.value = null
-        }
-    }
-
-    fun toggleAmbient(type: AmbientSoundManager.SoundType) {
-        if (_activeAmbient.value == type) {
+    // ============ صدای محیطی ============
+    fun setAmbient(type: AmbientType?) {
+        if (type == null) {
             ambientManager.stop()
             _activeAmbient.value = null
         } else {
@@ -354,79 +240,184 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
         }
     }
 
-    fun setAmbientVolume(volume: Float) {
-        _ambientVolume.value = volume
-        ambientManager.setVolume(volume)
+    fun setAmbientVolume(v: Float) {
+        _ambientVolume.value = v
+        ambientManager.setVolume(v)
     }
 
-    fun stopAllAmbient() {
-        ambientManager.stop()
-        _activeAmbient.value = null
-    }
+    // ============ پریست‌ها ============
+    fun applyComaPreset(preset: ComaPreset) {
+        setCustomSpeed(preset.speed)
+        setPitch(preset.pitch)
 
-    fun playPause() {
-        if (player.isPlaying) player.pause() else player.play()
-    }
+        _isReverbEnabled.value = preset.reverbPreset != null
+        preset.reverbPreset?.let {
+            _currentReverbPreset.value = it
+            effectsManager?.setReverbEnabled(true, it)
+        } ?: effectsManager?.setReverbEnabled(false)
 
-    fun startRecording(mediaProjection: MediaProjection) {
-        _recordingError.value = null
-        _lastSavedUri.value = null
-        _recordingSeconds.value = 0L
-        _isRecordingPaused.value = false
+        _isBassBoostEnabled.value = preset.bassBoost
+        effectsManager?.setBassBoostEnabled(preset.bassBoost)
 
-        audioExporter.setMetadata(
-            fileName = _outputFileName.value,
-            title = _outputTitle.value,
-            artist = _outputArtist.value
-        )
+        _is8DEnabled.value = preset.virtualizer
+        effectsManager?.setVirtualizerEnabled(preset.virtualizer)
 
-        if (!_isDynamicsEnabled.value) {
-            _isDynamicsEnabled.value = true
-            dynamicsManager?.setEnabled(true)
-        }
+        _isDynamicsEnabled.value = preset.dynamics
+        dynamicsManager?.setEnabled(preset.dynamics)
 
-        val started = audioExporter.startRecording(
-            mediaProjection,
-            bitRate = _exportQuality.value * 1024
-        )
-        if (started) {
-            _isRecording.value = true
-            if (!player.isPlaying) player.play()
+        if (preset.ambientSound != null) {
+            setAmbientVolume(preset.ambientVolume)
+            setAmbient(preset.ambientSound)
         } else {
-            _isRecording.value = false
+            setAmbient(null)
         }
     }
 
-    fun pauseRecording() {
-        if (!_isRecording.value || _isRecordingPaused.value) return
-        audioExporter.pauseRecording()
-        player.pause()
-        _isRecordingPaused.value = true
+    fun saveCurrentAsPreset(name: String, icon: String = "⭐") {
+        val id = "custom_${System.currentTimeMillis()}"
+        val preset = ComaPreset(
+            id = id,
+            name = name,
+            description = "پریست سفارشی",
+            speed = _currentSpeed.value,
+            pitch = _currentPitch.value,
+            reverbPreset = if (_isReverbEnabled.value) _currentReverbPreset.value else null,
+            bassBoost = _isBassBoostEnabled.value,
+            virtualizer = _is8DEnabled.value,
+            dynamics = _isDynamicsEnabled.value,
+            ambientSound = _activeAmbient.value,
+            ambientVolume = _ambientVolume.value,
+            icon = icon
+        )
+        presetStore.savePreset(preset)
+        reloadCustomPresets()
     }
 
-    fun resumeRecording() {
-        if (!_isRecording.value || !_isRecordingPaused.value) return
-        audioExporter.resumeRecording()
-        player.play()
-        _isRecordingPaused.value = false
+    fun deleteCustomPreset(id: String) {
+        presetStore.deletePreset(id)
+        reloadCustomPresets()
+    }
+
+    private fun reloadCustomPresets() {
+        _customPresets.value = presetStore.getAll()
+    }
+
+    // ============ ضبط ============
+    fun startRecording(projection: MediaProjection) {
+        _lastSavedPath.value = null
+        _recordingError.value = null
+        val ok = audioExporter.startRecording(projection)
+        _isRecording.value = ok
+        _recordingSeconds.value = 0
     }
 
     fun stopRecording() {
         audioExporter.stopRecording()
         _isRecording.value = false
-        _isRecordingPaused.value = false
     }
 
-    fun clearRecordingError() {
-        _recordingError.value = null
+    fun clearRecordingError() { _recordingError.value = null }
+    fun clearLastSaved() { _lastSavedPath.value = null }
+
+    // ============ جستجو ============
+    fun updateSearchQuery(q: String) {
+        _searchQuery.value = q
+        if (q.length >= 2) searchSongs(q)
+        else _searchResults.value = emptyList()
     }
+
+    private fun searchSongs(query: String) {
+        viewModelScope.launch {
+            val results = withContext(Dispatchers.IO) { queryMediaStore(query) }
+            _searchResults.value = results
+        }
+    }
+
+    private fun queryMediaStore(query: String): List<SongInfo> {
+        val list = mutableListOf<SongInfo>()
+        val projection = arrayOf(
+            MediaStore.Audio.Media._ID,
+            MediaStore.Audio.Media.TITLE,
+            MediaStore.Audio.Media.ARTIST,
+            MediaStore.Audio.Media.DURATION
+        )
+        val selection = "${MediaStore.Audio.Media.TITLE} LIKE ? OR " +
+                "${MediaStore.Audio.Media.ARTIST} LIKE ? OR " +
+                "${MediaStore.Audio.Media.ALBUM} LIKE ?"
+        val args = arrayOf("%$query%", "%$query%", "%$query%")
+
+        try {
+            getApplication<Application>().contentResolver.query(
+                MediaStore.Audio.Media.EXTERNAL_CONTENT_URI,
+                projection, selection, args,
+                "${MediaStore.Audio.Media.TITLE} ASC"
+            )?.use { c ->
+                val idCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media._ID)
+                val titleCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.TITLE)
+                val artistCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.ARTIST)
+                val durCol = c.getColumnIndexOrThrow(MediaStore.Audio.Media.DURATION)
+                while (c.moveToNext() && list.size < 100) {
+                    val id = c.getLong(idCol)
+                    val uri = ContentUris.withAppendedId(
+                        MediaStore.Audio.Media.EXTERNAL_CONTENT_URI, id
+                    )
+                    list += SongInfo(
+                        uri = uri,
+                        title = c.getString(titleCol) ?: "ناشناخته",
+                        artist = c.getString(artistCol) ?: "نامشخص",
+                        durationMs = c.getLong(durCol)
+                    )
+                }
+            }
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+        return list
+    }
+
+    // ============ AI ============
+    fun askAi(prompt: String) {
+        viewModelScope.launch {
+            _aiLoading.value = true
+            _aiResult.value = null
+            val result = aiAssistant.analyzeRequest(prompt)
+            _aiResult.value = result
+            _aiLoading.value = false
+
+            if (result.explanation.isNotBlank() && !result.explanation.startsWith("خطا")) {
+                setCustomSpeed(result.speed)
+                setPitch(result.pitch)
+                _isBassBoostEnabled.value = result.bassBoost
+                effectsManager?.setBassBoostEnabled(result.bassBoost)
+                _is8DEnabled.value = result.virtualizer
+                effectsManager?.setVirtualizerEnabled(result.virtualizer)
+                _isReverbEnabled.value = result.reverb
+                if (result.reverb) {
+                    _currentReverbPreset.value = result.reverbPreset.toShort()
+                    effectsManager?.setReverbEnabled(true, result.reverbPreset.toShort())
+                } else effectsManager?.setReverbEnabled(false)
+                _isDynamicsEnabled.value = result.dynamics
+                dynamicsManager?.setEnabled(result.dynamics)
+            }
+        }
+    }
+
+    fun clearAiResult() { _aiResult.value = null }
 
     override fun onCleared() {
         super.onCleared()
-        if (_isRecording.value) audioExporter.stopRecording()
-        ambientManager.stop()
-        dynamicsManager?.release()
-        effectsManager?.release()
+        progressJob?.cancel()
         player.release()
+        effectsManager?.release()
+        dynamicsManager?.release()
+        ambientManager.release()
+        audioExporter.release()
     }
 }
+
+data class SongInfo(
+    val uri: Uri,
+    val title: String,
+    val artist: String,
+    val durationMs: Long
+)
