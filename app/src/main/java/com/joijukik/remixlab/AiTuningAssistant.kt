@@ -1,177 +1,98 @@
 package com.joijukik.remixlab
 
-import android.media.audiofx.PresetReverb
-
 object AiTuningAssistant {
 
     data class TuningResult(
+        val detectedKeywords: List<String>,
         val speed: Float = 1.0f,
         val pitch: Float = 1.0f,
         val reverb: Boolean = false,
-        val reverbPreset: Short? = null,
         val bassBoost: Boolean = false,
         val virtualizer: Boolean = false,
         val dynamics: Boolean = false,
-        val ambientSound: AmbientSoundManager.SoundType? = null,
-        val ambientVolume: Float = 0.3f,
-        val detectedKeywords: List<String> = emptyList(),
-        val suggestedPreset: String? = null
+        val explanation: String = ""
     )
 
+    /**
+     * تحلیل ساده متن ورودی و برگرداندن تنظیمات پیشنهادی.
+     * (بدون نیاز به API خارجی)
+     */
     fun analyzeRequest(prompt: String): TuningResult {
-        val text = prompt.lowercase().trim()
+        val lower = prompt.lowercase()
         val detected = mutableListOf<String>()
 
         var speed = 1.0f
         var pitch = 1.0f
         var reverb = false
-        var reverbPreset: Short? = null
         var bassBoost = false
         var virtualizer = false
         var dynamics = false
-        var ambientSound: AmbientSoundManager.SoundType? = null
-        var ambientVolume = 0.3f
-        var suggestedPreset: String? = null
+        val explanations = mutableListOf<String>()
 
-        if (text.containsAny("کمایی", "کما", "coma")) {
-            detected.add("کمایی")
-            speed = 0.65f
-            pitch = 0.92f
+        // تشخیص کلیدواژه‌ها
+        if (lower.contains("بارون") || lower.contains("rain") || lower.contains("بارانی")) {
+            detected += "بارون"
+            speed = 0.85f
+            pitch = 0.95f
             reverb = true
-            reverbPreset = PresetReverb.PRESET_LARGEHALL
+            explanations += "فضای بارونی با ریورب ملایم"
+        }
+        if (lower.contains("شب") || lower.contains("night")) {
+            detected += "شب"
+            speed = 0.8f
+            reverb = true
             bassBoost = true
-            ambientSound = AmbientSoundManager.SoundType.RAIN
-            ambientVolume = 0.25f
-            suggestedPreset = "Deep Coma"
+            explanations += "فضای شبانه با بیس گرم"
         }
-
-        if (text.containsAny("دریم", "dreamcore", "خواب", "رویا", "کابوس")) {
-            detected.add("دریم‌کور")
-            speed = 0.72f
-            pitch = 0.98f
-            reverb = true
-            reverbPreset = PresetReverb.PRESET_LARGEHALL
-            virtualizer = true
-            ambientSound = AmbientSoundManager.SoundType.WIND
-            ambientVolume = 0.3f
-            suggestedPreset = "Dark Dreamcore"
-        }
-
-        if (text.containsAny("کند", "آهسته", "slowed", "slow", "یواش")) {
-            detected.add("کند")
-            if (speed == 1.0f) speed = 0.8f
-            reverb = true
-            if (reverbPreset == null) {
-                reverbPreset = PresetReverb.PRESET_LARGEHALL
-            }
-        }
-
-        if (text.containsAny("تند", "سریع", "nightcore", "fast", "نایتکور")) {
-            detected.add("تند")
+        if (lower.contains("تند") || lower.contains("nightcore") || lower.contains("سریع")) {
+            detected += "تند"
             speed = 1.25f
             pitch = 1.15f
+            explanations += "سرعت و گام بالا"
         }
-
-        if (text.containsAny("بم", "بمتر", "پایین", "low pitch", "deep voice")) {
-            detected.add("گام بم")
-            if (pitch == 1.0f) pitch = 0.9f
+        if (lower.contains("کند") || lower.contains("slowed") || lower.contains("آروم")) {
+            detected += "کند"
+            speed = 0.8f
+            pitch = 0.95f
+            explanations += "حالت Slowed"
         }
-
-        if (text.containsAny("تیز", "زیر", "بالا", "high pitch")) {
-            detected.add("گام تیز")
-            if (pitch == 1.0f) pitch = 1.1f
-        }
-
-        if (text.containsAny("طنین", "ریورب", "reverb", "اکو", "فضا")) {
-            detected.add("طنین")
-            reverb = true
-            if (reverbPreset == null) {
-                reverbPreset = PresetReverb.PRESET_LARGEHALL
-            }
-        }
-
-        if (text.containsAny("باس", "bass", "کوبنده", "سنگین")) {
-            detected.add("تقویت باس")
+        if (lower.contains("غرق") || lower.contains("deep") || lower.contains("عمیق")) {
+            detected += "عمیق"
+            speed = 0.7f
             bassBoost = true
-        }
-
-        if (text.containsAny("8d", "هشت بعدی", "فضایی", "چرخش", "spatial")) {
-            detected.add("8D")
-            virtualizer = true
-        }
-
-        if (text.containsAny("استودیو", "کیفیت", "حرفه", "studio", "تمیز")) {
-            detected.add("کیفیت استودیویی")
             dynamics = true
+            explanations += "بیس عمیق و دینامیک استودیویی"
         }
-
-        if (text.containsAny("بارون", "باران", "rain")) {
-            detected.add("باران")
-            if (text.containsAny("شدید", "heavy", "تند")) {
-                ambientSound = AmbientSoundManager.SoundType.HEAVY_RAIN
-            } else {
-                ambientSound = AmbientSoundManager.SoundType.RAIN
-            }
-            ambientVolume = 0.3f
+        if (lower.contains("8d") || lower.contains("چرخش") || lower.contains("دور سر")) {
+            detected += "8D"
+            virtualizer = true
+            explanations += "افکت چرخش ۸ بعدی"
         }
-
-        if (text.containsAny("رعد", "thunder", "طوفان", "storm")) {
-            detected.add("رعد")
-            ambientSound = AmbientSoundManager.SoundType.THUNDER
-            ambientVolume = 0.2f
-        }
-
-        if (text.containsAny("باد", "wind", "نسیم")) {
-            detected.add("باد")
-            ambientSound = AmbientSoundManager.SoundType.WIND
-            ambientVolume = 0.3f
-        }
-
-        if (text.containsAny("نویز", "noise", "نوار", "کاست", "خش")) {
-            detected.add("نویز آنالوگ")
-            ambientSound = AmbientSoundManager.SoundType.NOISE
-            ambientVolume = 0.2f
-        }
-
-        if (text.containsAny("تاریک", "dark", "غمگین", "غم", "سرد")) {
-            detected.add("تاریک")
-            if (speed == 1.0f) speed = 0.75f
-            if (pitch == 1.0f) pitch = 0.95f
+        if (lower.contains("ریورب") || lower.contains("reverb") || lower.contains("پژواک")) {
+            detected += "ریورب"
             reverb = true
-            if (reverbPreset == null) {
-                reverbPreset = PresetReverb.PRESET_LARGEHALL
-            }
-            if (ambientSound == null) {
-                ambientSound = AmbientSoundManager.SoundType.WIND
-            }
+            explanations += "ریورب فعال"
+        }
+        if (lower.contains("بیس") || lower.contains("bass")) {
+            detected += "بیس"
+            bassBoost = true
+            explanations += "تقویت بیس"
         }
 
-        if (text.containsAny("پایان", "سینمایی", "outro", "cinematic")) {
-            detected.add("پایان سینمایی")
-            speed = 0.9f
-            reverb = true
-            if (reverbPreset == null) {
-                reverbPreset = PresetReverb.PRESET_MEDIUMHALL
-            }
-            suggestedPreset = "Cinematic Outro"
-        }
+        val explanation = if (explanations.isEmpty())
+            "تنظیمات پیش‌فرض اعمال شد"
+        else
+            explanations.joinToString(" • ")
 
         return TuningResult(
+            detectedKeywords = detected,
             speed = speed,
             pitch = pitch,
             reverb = reverb,
-            reverbPreset = reverbPreset,
             bassBoost = bassBoost,
             virtualizer = virtualizer,
             dynamics = dynamics,
-            ambientSound = ambientSound,
-            ambientVolume = ambientVolume,
-            detectedKeywords = detected,
-            suggestedPreset = suggestedPreset
+            explanation = explanation
         )
-    }
-
-    private fun String.containsAny(vararg keywords: String): Boolean {
-        return keywords.any { this.contains(it) }
     }
 }
