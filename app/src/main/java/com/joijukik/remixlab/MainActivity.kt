@@ -106,7 +106,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
-    // 🎯 اصلاح شده: بعد از گرفتن اجازه، اول سرویس رو شروع می‌کنیم و بعد از کمی تاخیر، MediaProjection رو می‌گیریم
+    // 🎯 ترتیب صحیح: اول اجازه، بعد سرویس، بعد ضبط
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
@@ -120,14 +120,13 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
             }
 
             // 2. کمی صبر کن تا سرویس کاملاً در حالت foreground قرار بگیرد
-            // این تاخیر برای اطمینان از فراخوانی موفق getMediaProjection در اندروید ۱۴+ حیاتی است.
             Handler(Looper.getMainLooper()).postDelayed({
-                // 3. حالا که سرویس آماده است، MediaProjection را بگیر
+                // 3. حالا MediaProjection را بگیر و ضبط را شروع کن
                 val projection = projectionManager.getMediaProjection(
                     result.resultCode, result.data!!
                 )
                 viewModel.startRecording(projection)
-            }, 500) // 500 میلی‌ثانیه تاخیر کافی است
+            }, 500)
         }
     }
 
@@ -145,6 +144,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
         Text(text = "ریمیکس حرفه‌ای آهنگ‌های شما", style = MaterialTheme.typography.bodyMedium)
         Spacer(modifier = Modifier.height(32.dp))
 
+        // ─── دکمه انتخاب آهنگ ───
         Button(
             onClick = {
                 val permission = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -170,6 +170,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(16.dp))
 
+        // ─── نمایش اسم آهنگ و نوار پیشرفت ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -209,6 +210,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── پنل AI ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(
@@ -288,6 +290,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── COMA AUDIO LAB ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -333,6 +336,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── کنترل‌های دستی ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceVariant)
@@ -369,6 +373,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── افکت‌ها ───
         Text(
             text = "افکت‌ها",
             style = MaterialTheme.typography.titleMedium,
@@ -431,6 +436,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(32.dp))
 
+        // ─── بخش ضبط ───
         Card(
             modifier = Modifier.fillMaxWidth(),
             colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
@@ -582,7 +588,6 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                     Button(
                         onClick = {
                             viewModel.clearRecordingError()
-
                             // 🎯 فقط دیالوگ اجازه ضبط رو نشون می‌دیم
                             projectionLauncher.launch(
                                 projectionManager.createScreenCaptureIntent()
@@ -604,6 +609,7 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
 
         Spacer(modifier = Modifier.height(24.dp))
 
+        // ─── دکمه پخش/توقف ───
         Button(
             onClick = { viewModel.playPause() },
             modifier = Modifier
