@@ -1,0 +1,3 @@
+-keep class com.naman14.androidlame.** { *; }
+-keep class androidx.media3.** { *; }
+-dontwarn com.naman14.androidlame.**
