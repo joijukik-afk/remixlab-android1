@@ -42,6 +42,7 @@ class PlayerViewModel(application: Application) : AndroidViewModel(application) 
     private val audioExporter = AudioExporter(application)
     private val ambientManager = AmbientSoundManager()
 
+    // ─── State های اصلی ───
     private val _isSlowed = MutableStateFlow(false)
     val isSlowed: StateFlow<Boolean> = _isSlowed
 
