@@ -26,6 +26,7 @@ class AudioExporter(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
+    @Volatile private var isPaused = false
     private var outputFile: File? = null
     private var androidLame: AndroidLame? = null
 
@@ -33,9 +34,8 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // ─── تنظیمات استودیویی ───
-    private val sampleRate = 48000          // 48 kHz
-    private val channelCount = 2            // Stereo
+    private val sampleRate = 48000
+    private val channelCount = 2
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
     fun startRecording(
@@ -49,7 +49,6 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // 🎯 بافر ۸ برابر برای حذف کامل خش و پرش صدا
             val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
             ) / 2
@@ -77,6 +76,7 @@ class AudioExporter(private val context: Context) {
             outputFile = createTempFile()
             record.startRecording()
             isRecording = true
+            isPaused = false
 
             recordingThread = thread {
                 encodeAndWriteAudio(bufferSizeShorts, bitRate)
@@ -90,20 +90,49 @@ class AudioExporter(private val context: Context) {
         }
     }
 
+    /**
+     * ⏸ توقف موقت ضبط
+     */
+    fun pauseRecording() {
+        if (!isRecording || isPaused) return
+        isPaused = true
+        try {
+            audioRecord?.stop()
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * ▶️ ادامه ضبط از همون‌جا
+     */
+    fun resumeRecording() {
+        if (!isRecording || !isPaused) return
+        try {
+            audioRecord?.startRecording()
+            isPaused = false
+        } catch (e: Exception) {
+            e.printStackTrace()
+        }
+    }
+
+    /**
+     * ⏹ توقف کامل ضبط و ذخیره فایل MP3
+     */
     fun stopRecording() {
         isRecording = false
+        isPaused = false
     }
 
     private fun encodeAndWriteAudio(bufferSizeShorts: Int, bitRate: Int) {
         val file = outputFile ?: return
 
-        // پیکربندی LAME
         val builder = LameBuilder()
             .setInSampleRate(sampleRate)
             .setOutChannels(channelCount)
-            .setOutBitrate(bitRate / 1024)  // kbps
+            .setOutBitrate(bitRate / 1024)
             .setMode(LameBuilder.Mode.JSTEREO)
-            .setQuality(0)                   // 🎯 بالاترین کیفیت (0 = بهترین)
+            .setQuality(0)
             .setVbrMode(LameBuilder.VbrMode.VBR_OFF)
 
         androidLame = AndroidLame(builder)
@@ -117,18 +146,21 @@ class AudioExporter(private val context: Context) {
             FileOutputStream(file).use { outputStream ->
                 val record = audioRecord ?: return
                 while (isRecording) {
+                    if (isPaused) {
+                        try { Thread.sleep(50) } catch (_: Exception) {}
+                        continue
+                    }
+
                     val shortsRead = record.read(pcmBuffer, 0, pcmBuffer.size)
                     if (shortsRead <= 0) continue
 
                     val samplesPerChannel = shortsRead / 2
 
-                    // تفکیک کانال چپ و راست
                     for (i in 0 until samplesPerChannel) {
                         leftChannel[i] = pcmBuffer[i * 2]
                         rightChannel[i] = pcmBuffer[i * 2 + 1]
                     }
 
-                    // انکود به MP3
                     val bytesEncoded = androidLame?.encode(
                         leftChannel,
                         rightChannel,
@@ -146,7 +178,6 @@ class AudioExporter(private val context: Context) {
             e.printStackTrace()
             onError?.invoke("خطا در انکود: ${e.message}")
         } finally {
-            // آزادسازی منابع
             androidLame?.close()
             androidLame = null
             try { audioRecord?.stop() } catch (_: Exception) {}
