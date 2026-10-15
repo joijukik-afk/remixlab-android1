@@ -33,13 +33,14 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // تنظیمات استودیویی
     private val sampleRate = 48000
     private val channelCount = 2
-    private val bitRate = 320 // kbps
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
-    fun startRecording(mediaProjection: MediaProjection): Boolean {
+    fun startRecording(
+        mediaProjection: MediaProjection,
+        bitRate: Int = 320 * 1024
+    ): Boolean {
         return try {
             val captureConfig = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
@@ -47,10 +48,9 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // بافر بر حسب Short (نه Byte)
             val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
-            ) / 2  // هر Short دو بایته
+            ) / 2
             val bufferSizeShorts = (minBufferSizeShorts * 4).coerceAtLeast(sampleRate)
 
             val record = AudioRecord.Builder()
@@ -77,7 +77,7 @@ class AudioExporter(private val context: Context) {
             isRecording = true
 
             recordingThread = thread {
-                encodeAndWriteAudio(bufferSizeShorts)
+                encodeAndWriteAudio(bufferSizeShorts, bitRate)
             }
 
             true
@@ -92,21 +92,19 @@ class AudioExporter(private val context: Context) {
         isRecording = false
     }
 
-    private fun encodeAndWriteAudio(bufferSizeShorts: Int) {
+    private fun encodeAndWriteAudio(bufferSizeShorts: Int, bitRate: Int) {
         val file = outputFile ?: return
 
-        // ۱. پیکربندی LAME
         val builder = LameBuilder()
             .setInSampleRate(sampleRate)
             .setOutChannels(channelCount)
-            .setOutBitrate(bitRate)
+            .setOutBitrate(bitRate / 1024)  // kbps
             .setMode(LameBuilder.Mode.JSTEREO)
-            .setQuality(2)  // 0=بهترین, 9=سریع‌ترین
+            .setQuality(2)
             .setVbrMode(LameBuilder.VbrMode.VBR_OFF)
 
         androidLame = AndroidLame(builder)
 
-        // ۲. بافرهای Short برای خواندن و تفکیک کانال
         val pcmBuffer = ShortArray(bufferSizeShorts)
         val leftChannel = ShortArray(bufferSizeShorts / 2)
         val rightChannel = ShortArray(bufferSizeShorts / 2)
@@ -116,20 +114,16 @@ class AudioExporter(private val context: Context) {
             FileOutputStream(file).use { outputStream ->
                 val record = audioRecord ?: return
                 while (isRecording) {
-                    // خواندن مستقیم در ShortArray
                     val shortsRead = record.read(pcmBuffer, 0, pcmBuffer.size)
                     if (shortsRead <= 0) continue
 
-                    // تعداد نمونه در هر کانال (چون استریو)
                     val samplesPerChannel = shortsRead / 2
 
-                    // تفکیک کانال چپ و راست (De-interleave)
                     for (i in 0 until samplesPerChannel) {
                         leftChannel[i] = pcmBuffer[i * 2]
                         rightChannel[i] = pcmBuffer[i * 2 + 1]
                     }
 
-                    // انکود به MP3
                     val bytesEncoded = androidLame?.encode(
                         leftChannel,
                         rightChannel,
@@ -147,7 +141,6 @@ class AudioExporter(private val context: Context) {
             e.printStackTrace()
             onError?.invoke("خطا در انکود: ${e.message}")
         } finally {
-            // آزادسازی
             androidLame?.close()
             androidLame = null
             try { audioRecord?.stop() } catch (_: Exception) {}
