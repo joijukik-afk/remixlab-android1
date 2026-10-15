@@ -15,6 +15,11 @@ class MediaProjectionService : Service() {
     companion object {
         const val CHANNEL_ID = "remixlab_projection_channel"
         const val NOTIFICATION_ID = 1
+
+        // 🎯 فلگ برای بررسی آماده بودن سرویس
+        @Volatile
+        var isRunning: Boolean = false
+            private set
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -27,6 +32,7 @@ class MediaProjectionService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val notification = buildNotification()
 
+        // 🎯 مهم: نوع سرویس foreground رو mediaProjection اعلام می‌کنیم
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
             startForeground(
                 NOTIFICATION_ID,
@@ -37,11 +43,15 @@ class MediaProjectionService : Service() {
             startForeground(NOTIFICATION_ID, notification)
         }
 
+        // 🎯 علامت‌گذاری که سرویس آماده است
+        isRunning = true
+
         return START_NOT_STICKY
     }
 
     override fun onDestroy() {
         super.onDestroy()
+        isRunning = false
         stopForeground(STOP_FOREGROUND_REMOVE)
     }
 
@@ -62,7 +72,7 @@ class MediaProjectionService : Service() {
     private fun buildNotification(): Notification {
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("RemixLab")
-            .setContentText("در حال آماده‌سازی ضبط...")
+            .setContentText("آماده ضبط ریمیکس...")
             .setSmallIcon(android.R.drawable.ic_media_play)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .build()
