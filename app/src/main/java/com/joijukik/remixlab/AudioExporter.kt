@@ -10,6 +10,7 @@ import android.media.projection.MediaProjection
 import android.net.Uri
 import android.os.Build
 import android.os.Environment
+import android.os.SystemClock
 import android.provider.MediaStore
 import com.naman14.androidlame.AndroidLame
 import com.naman14.androidlame.LameBuilder
@@ -30,13 +31,18 @@ class AudioExporter(private val context: Context) {
     private var outputFile: File? = null
     private var androidLame: AndroidLame? = null
 
-    var onProgress: ((Long) -> Unit)? = null
+    var onProgress: ((Long) -> Unit)? = null  // اینجا ثانیه‌ها رو می‌فرستیم
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
     private val sampleRate = 48000
     private val channelCount = 2
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
+
+    // 🎯 برای محاسبه زمان دقیق
+    private var startTimeMs: Long = 0
+    private var pausedDurationMs: Long = 0
+    private var pauseStartMs: Long = 0
 
     fun startRecording(
         mediaProjection: MediaProjection,
@@ -49,7 +55,6 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // 🎯 بافر بزرگ برای حذف خش صدا
             val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
             ) / 2
@@ -79,6 +84,11 @@ class AudioExporter(private val context: Context) {
             isRecording = true
             isPaused = false
 
+            // 🎯 ذخیره زمان شروع
+            startTimeMs = SystemClock.elapsedRealtime()
+            pausedDurationMs = 0
+            pauseStartMs = 0
+
             recordingThread = thread {
                 encodeAndWriteAudio(bufferSizeShorts, bitRate)
             }
@@ -91,12 +101,10 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    /**
-     * ⏸ توقف موقت ضبط
-     */
     fun pauseRecording() {
         if (!isRecording || isPaused) return
         isPaused = true
+        pauseStartMs = SystemClock.elapsedRealtime()
         try {
             audioRecord?.stop()
         } catch (e: Exception) {
@@ -104,22 +112,21 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    /**
-     * ▶️ ادامه ضبط از همون‌جا
-     */
     fun resumeRecording() {
         if (!isRecording || !isPaused) return
         try {
             audioRecord?.startRecording()
+            // 🎯 محاسبه زمان توقف
+            if (pauseStartMs > 0) {
+                pausedDurationMs += SystemClock.elapsedRealtime() - pauseStartMs
+                pauseStartMs = 0
+            }
             isPaused = false
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
 
-    /**
-     * ⏹ توقف کامل ضبط و ذخیره فایل MP3
-     */
     fun stopRecording() {
         isRecording = false
         isPaused = false
@@ -171,7 +178,14 @@ class AudioExporter(private val context: Context) {
 
                     if (bytesEncoded > 0) {
                         outputStream.write(mp3Buffer, 0, bytesEncoded)
-                        onProgress?.invoke(file.length())
+
+                        // 🎯 محاسبه زمان واقعی (ثانیه)
+                        val now = SystemClock.elapsedRealtime()
+                        val totalPausedMs = pausedDurationMs +
+                                (if (isPaused && pauseStartMs > 0)
+                                    (now - pauseStartMs) else 0)
+                        val elapsedSeconds = (now - startTimeMs - totalPausedMs) / 1000
+                        onProgress?.invoke(elapsedSeconds)
                     }
                 }
             }
