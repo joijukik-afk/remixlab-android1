@@ -1,110 +1,96 @@
 package com.joijukik.remixlab
 
 import android.media.audiofx.BassBoost
+import android.media.audiofx.DynamicsProcessing
 import android.media.audiofx.Equalizer
 import android.media.audiofx.PresetReverb
 import android.media.audiofx.Virtualizer
+import android.util.Log
 
 class AudioEffectsManager(audioSessionId: Int) {
 
-    private var equalizer: Equalizer? = null
-    private var bassBoost: BassBoost? = null
-    private var virtualizer: Virtualizer? = null
-    private var reverb: PresetReverb? = null
+    private val tag = "AudioEffects"
 
-    init {
-        if (audioSessionId != 0 && audioSessionId != -1) {
-            equalizer = try {
-                Equalizer(0, audioSessionId).apply { enabled = false }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+    private val equalizer: Equalizer? = try {
+        Equalizer(0, audioSessionId).apply { enabled = true }
+    } catch (e: Exception) { Log.e(tag, "EQ fail", e); null }
 
-            bassBoost = try {
-                BassBoost(0, audioSessionId).apply { enabled = false }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+    private val bassBoost: BassBoost? = try {
+        BassBoost(0, audioSessionId).apply { enabled = false }
+    } catch (e: Exception) { Log.e(tag, "Bass fail", e); null }
 
-            virtualizer = try {
-                Virtualizer(0, audioSessionId).apply { enabled = false }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+    private val virtualizer: Virtualizer? = try {
+        Virtualizer(0, audioSessionId).apply { enabled = false }
+    } catch (e: Exception) { Log.e(tag, "Virt fail", e); null }
 
-            reverb = try {
-                PresetReverb(0, audioSessionId).apply { enabled = false }
-            } catch (e: Exception) {
-                e.printStackTrace()
-                null
-            }
+    private val reverb: PresetReverb? = try {
+        PresetReverb(0, audioSessionId).apply { enabled = false }
+    } catch (e: Exception) { Log.e(tag, "Rev fail", e); null }
+
+    private val dynamics: DynamicsProcessing? = try {
+        val config = DynamicsProcessing.Config.Builder(
+            DynamicsProcessing.VARIANT_FAVOR_FREQUENCY_RESOLUTION,
+            2, true, 10, true, 4, true, 10, true
+        ).build()
+        DynamicsProcessing(0, audioSessionId, config).apply { enabled = true }
+    } catch (e: Exception) { Log.e(tag, "Dyn fail", e); null }
+
+    fun setBassBoostEnabled(enabled: Boolean, strength: Short = 800) {
+        bassBoost?.let { it.setStrength(strength); it.enabled = enabled }
+    }
+
+    fun setVirtualizerEnabled(enabled: Boolean, strength: Short = 600) {
+        virtualizer?.let { it.setStrength(strength); it.enabled = enabled }
+    }
+
+    fun setReverbEnabled(enabled: Boolean, preset: Short = PresetReverb.PRESET_LARGEROOM) {
+        reverb?.let { it.preset = preset; it.enabled = enabled }
+    }
+
+    fun setPreEqBandGain(band: Int, gainDb: Float) {
+        dynamics?.let {
+            val eq = it.getPreEqByChannelIndex(0)
+            if (band < eq.bandCount) eq.setBandLevel(band, gainDb)
         }
     }
 
-    fun setReverbEnabled(enabled: Boolean, preset: Short = PresetReverb.PRESET_LARGEHALL) {
-        val r = reverb ?: return
-        try {
-            r.enabled = enabled
-            if (enabled) {
-                r.preset = preset
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun setCompressorThreshold(band: Int, thresholdDb: Float) {
+        dynamics?.let {
+            val mbc = it.getMbcByChannelIndex(0)
+            if (band < mbc.bandCount) mbc.setThreshold(band, thresholdDb)
         }
     }
 
-    fun setBassBoostEnabled(enabled: Boolean) {
-        val b = bassBoost ?: return
-        try {
-            b.enabled = enabled
-            if (enabled) {
-                b.setStrength(1000.toShort())
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
+    fun setCompressorRatio(band: Int, ratio: Float) {
+        dynamics?.let {
+            val mbc = it.getMbcByChannelIndex(0)
+            if (band < mbc.bandCount) mbc.setRatio(band, ratio)
         }
     }
 
-    fun setVirtualizerEnabled(enabled: Boolean) {
-        val v = virtualizer ?: return
-        try {
-            v.enabled = enabled
-            if (enabled) {
-                v.setStrength(1000.toShort())
-            }
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun setLimiterEnabled(enabled: Boolean) {
+        dynamics?.limiterEnabled = enabled
     }
 
-    fun setEqualizerEnabled(enabled: Boolean) {
-        try {
-            equalizer?.enabled = enabled
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun setLimiterThreshold(thresholdDb: Float) {
+        dynamics?.let { it.limiterThreshold = thresholdDb }
     }
 
-    fun setEqualizerBandLevel(bandIndex: Int, level: Short) {
-        try {
-            equalizer?.setBandLevel(bandIndex.toShort(), level)
-        } catch (e: Exception) {
-            e.printStackTrace()
-        }
+    fun setInputGain(gainDb: Float) {
+        dynamics?.inputGain = gainDb
+    }
+
+    fun resetAll() {
+        bassBoost?.enabled = false
+        virtualizer?.enabled = false
+        reverb?.enabled = false
     }
 
     fun release() {
-        try { equalizer?.release() } catch (_: Exception) { }
-        try { bassBoost?.release() } catch (_: Exception) { }
-        try { virtualizer?.release() } catch (_: Exception) { }
-        try { reverb?.release() } catch (_: Exception) { }
-
-        equalizer = null
-        bassBoost = null
-        virtualizer = null
-        reverb = null
+        try { equalizer?.release() } catch (_: Exception) {}
+        try { bassBoost?.release() } catch (_: Exception) {}
+        try { virtualizer?.release() } catch (_: Exception) {}
+        try { reverb?.release() } catch (_: Exception) {}
+        try { dynamics?.release() } catch (_: Exception) {}
     }
 }
