@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
+    <external-files-path
+        name="remixlab_recordings"
+        path="Music/RemixLab/" />
+    <external-files-path
+        name="remixlab_exports"
+        path="Music/" />
+    <cache-path
+        name="remixlab_cache"
+        path="." />
+    <files-path
+        name="remixlab_files"
+        path="." />
+</paths>
