@@ -9,9 +9,9 @@ import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.verticalScroll
-import androidx.compose.material3.Button
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -21,6 +21,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.joijukik.remixlab.navigation.Routes
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun HomeScreen(
     onNavigate: (String) -> Unit
@@ -51,7 +52,6 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(64.dp))
 
-        // کارت شروع ریمیکس
         MenuCard(
             title = "🎵 شروع ریمیکس",
             description = "آهنگت رو انتخاب کن و ریمیکس بساز",
@@ -60,7 +60,6 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // کارت پریست‌ها
         MenuCard(
             title = "🎛️ کتابخانه پریست‌ها",
             description = "پریست‌های آماده کمایی و تاریک",
@@ -69,7 +68,6 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // کارت تنظیمات
         MenuCard(
             title = "⚙️ تنظیمات",
             description = "تنظیمات برنامه و کیفیت خروجی",
@@ -78,7 +76,6 @@ fun HomeScreen(
 
         Spacer(modifier = Modifier.height(16.dp))
 
-        // کارت درباره
         MenuCard(
             title = "ℹ️ درباره RemixLab",
             description = "اطلاعات و راهنما",
@@ -89,6 +86,7 @@ fun HomeScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun MenuCard(
     title: String,
