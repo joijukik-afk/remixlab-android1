@@ -11,10 +11,11 @@ import android.net.Uri
 import android.os.Build
 import android.os.Environment
 import android.provider.MediaStore
-import com.arthenica.ffmpegkit.FFmpegKit
-import com.arthenica.ffmpegkit.ReturnCode
+import com.naman14.androidlame.AndroidLame
+import com.naman14.androidlame.LameBuilder
 import java.io.File
 import java.io.FileInputStream
+import java.io.FileOutputStream
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
@@ -25,35 +26,38 @@ class AudioExporter(private val context: Context) {
     private var audioRecord: AudioRecord? = null
     private var recordingThread: Thread? = null
     @Volatile private var isRecording = false
-    private var pcmFile: File? = null
+    private var outputFile: File? = null
+    private var androidLame: AndroidLame? = null
 
     var onProgress: ((Long) -> Unit)? = null
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    // کیفیت استودیویی
+    // تنظیمات ضبط با کیفیت استودیویی
     private val sampleRate = 48000
     private val channelCount = 2
-    private val bitRate = 320 * 1024 // 320 kbps for MP3
+    private val bitRate = 320 // kbps
+    private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
     fun startRecording(mediaProjection: MediaProjection): Boolean {
         return try {
+            // ۱. پیکربندی برای ضبط صدای درون برنامه
             val captureConfig = AudioPlaybackCaptureConfiguration.Builder(mediaProjection)
                 .addMatchingUsage(AudioAttributes.USAGE_MEDIA)
                 .addMatchingUsage(AudioAttributes.USAGE_GAME)
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
-            // بافر بزرگ برای جلوگیری از underrun (خش صدا)
             val minBufferSize = AudioRecord.getMinBufferSize(
-                sampleRate, AudioFormat.CHANNEL_IN_STEREO, AudioFormat.ENCODING_PCM_16BIT
+                sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
             )
             val bufferSize = (minBufferSize * 4).coerceAtLeast(sampleRate * 2)
 
+            // ۲. ساخت AudioRecord
             val record = AudioRecord.Builder()
                 .setAudioFormat(
                     AudioFormat.Builder()
-                        .setEncoding(AudioFormat.ENCODING_PCM_16BIT)
+                        .setEncoding(audioFormat)
                         .setSampleRate(sampleRate)
                         .setChannelMask(AudioFormat.CHANNEL_IN_STEREO)
                         .build()
@@ -69,12 +73,13 @@ class AudioExporter(private val context: Context) {
             }
 
             audioRecord = record
-            pcmFile = createTempPcmFile()
+            outputFile = createTempFile()
             record.startRecording()
             isRecording = true
 
+            // ۳. شروع نخ ضبط و انکود همزمان
             recordingThread = thread {
-                writePcmData(bufferSize)
+                encodeAndWriteAudio(bufferSize)
             }
 
             true
@@ -89,66 +94,65 @@ class AudioExporter(private val context: Context) {
         isRecording = false
     }
 
-    private fun writePcmData(bufferSize: Int) {
-        val file = pcmFile ?: return
-        val data = ByteArray(bufferSize)
-        var totalBytes: Long = 0
+    private fun encodeAndWriteAudio(bufferSize: Int) {
+        val file = outputFile ?: return
 
-        file.outputStream().use { outputStream ->
-            val record = audioRecord ?: return
-            while (isRecording) {
-                val read = record.read(data, 0, bufferSize)
-                if (read > 0) {
-                    outputStream.write(data, 0, read)
-                    totalBytes += read
-                    onProgress?.invoke(totalBytes)
+        // ۱. پیکربندی LameBuilder برای کیفیت بالا
+        val builder = LameBuilder()
+            .setInSampleRate(sampleRate)
+            .setOutChannels(channelCount)
+            .setOutBitrate(bitRate)
+            .setMode(LameBuilder.Mode.JSTEREO)
+            .setQuality(2) // 0=بهترین (کند), 9=بدترین (سریع)
+            .setVbrMode(LameBuilder.VbrMode.VBR_OFF) // CBR (کیفیت ثابت)
+
+        androidLame = AndroidLame(builder)
+
+        val pcmBuffer = ByteArray(bufferSize)
+        val mp3Buffer = ByteArray((7200 + (1.25 * bufferSize)).toInt()) // بافر خروجی برای MP3
+
+        try {
+            FileOutputStream(file).use { outputStream ->
+                val record = audioRecord ?: return
+                while (isRecording) {
+                    val bytesRead = record.read(pcmBuffer, 0, pcmBuffer.size)
+                    if (bytesRead <= 0) continue
+
+                    // ۲. انکود داده‌های PCM به MP3
+                    // برای استریو، از همان بافر برای هر دو کانال استفاده می‌شود
+                    val bytesEncoded = androidLame?.encode(
+                        pcmBuffer, pcmBuffer, bytesRead, mp3Buffer
+                    ) ?: 0
+
+                    if (bytesEncoded > 0) {
+                        outputStream.write(mp3Buffer, 0, bytesEncoded)
+                        onProgress?.invoke(file.length())
+                    }
                 }
             }
-        }
+        } catch (e: Exception) {
+            e.printStackTrace()
+            onError?.invoke("خطا در انکود: ${e.message}")
+        } finally {
+            // ۳. آزادسازی منابع
+            androidLame?.close()
+            androidLame = null
+            try { audioRecord?.stop() } catch (_: Exception) {}
+            try { audioRecord?.release() } catch (_: Exception) {}
+            audioRecord = null
 
-        try { audioRecord?.stop() } catch (_: Exception) {}
-        try { audioRecord?.release() } catch (_: Exception) {}
-        audioRecord = null
-
-        // 🔑 تبدیل PCM به MP3 با FFmpeg
-        convertPcmToMp3(file)
-    }
-
-    /**
-     * تبدیل فایل خام PCM به MP3 با استفاده از کتابخانه LAME
-     */
-    private fun convertPcmToMp3(pcmFile: File) {
-        val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
-        val outputDir = File(context.cacheDir, "recordings")
-        if (!outputDir.exists()) outputDir.mkdirs()
-        val mp3File = File(outputDir, "RemixLab_$timestamp.mp3")
-
-        // 🎯 دستور FFmpeg برای تبدیل PCM به MP3 با کیفیت 320kbps
-        val command = "-y -f s16le -ar $sampleRate -ac $channelCount -i \"${pcmFile.absolutePath}\" -codec:a libmp3lame -b:a 320k \"${mp3File.absolutePath}\""
-
-        FFmpegKit.executeAsync(command) { session ->
-            val returnCode = session.returnCode
-            if (ReturnCode.isSuccess(returnCode)) {
-                // ✅ تبدیل موفق - فایل PCM رو پاک کن و MP3 رو ذخیره کن
-                pcmFile.delete()
-                saveMp3ToMediaStore(mp3File)
-            } else {
-                onError?.invoke("خطا در تبدیل به MP3: ${session.failStackTrace}")
-                // اگه تبدیل نشد، فایل PCM رو نگه دار (برای دیباگ)
-            }
+            // ۴. ذخیره فایل MP3 نهایی
+            saveMp3ToMediaStore(file)
         }
     }
 
-    /**
-     * ذخیره فایل MP3 در پوشه Music/RemixLab
-     */
     private fun saveMp3ToMediaStore(mp3File: File) {
         val timestamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val fileName = "RemixLab_$timestamp.mp3"
 
         val values = ContentValues().apply {
             put(MediaStore.Audio.Media.DISPLAY_NAME, fileName)
-            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg") // ← MP3 MIME type
+            put(MediaStore.Audio.Media.MIME_TYPE, "audio/mpeg") // 👈 MIME type برای MP3
             put(MediaStore.Audio.Media.DATE_ADDED, System.currentTimeMillis() / 1000)
             put(MediaStore.Audio.Media.IS_MUSIC, 1)
 
@@ -166,7 +170,7 @@ class AudioExporter(private val context: Context) {
 
         val uri = context.contentResolver.insert(collection, values)
         if (uri == null) {
-            onError?.invoke("خطا در ثبت MP3 در MediaStore")
+            onError?.invoke("خطا در ثبت فایل MP3 در MediaStore")
             return
         }
 
@@ -193,9 +197,9 @@ class AudioExporter(private val context: Context) {
         }
     }
 
-    private fun createTempPcmFile(): File {
+    private fun createTempFile(): File {
         val dir = File(context.cacheDir, "recordings")
         if (!dir.exists()) dir.mkdirs()
-        return File(dir, "temp_${System.currentTimeMillis()}.pcm")
+        return File(dir, "temp_${System.currentTimeMillis()}.mp3")
     }
 }
