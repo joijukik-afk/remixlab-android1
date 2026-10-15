@@ -8,8 +8,6 @@ import android.media.projection.MediaProjectionManager
 import android.net.Uri
 import android.os.Build
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -106,10 +104,20 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
     val projectionManager =
         context.getSystemService(Context.MEDIA_PROJECTION_SERVICE) as MediaProjectionManager
 
+    // 🎯 وقتی کاربر اجازه داد، اول سرویس رو شروع می‌کنیم، بعد ضبط رو
     val projectionLauncher = rememberLauncherForActivityResult(
         contract = ActivityResultContracts.StartActivityForResult()
     ) { result ->
         if (result.resultCode == android.app.Activity.RESULT_OK && result.data != null) {
+            // 🎯 حالا که اجازه گرفتیم، سرویس رو شروع می‌کنیم
+            val serviceIntent = Intent(context, MediaProjectionService::class.java)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(serviceIntent)
+            } else {
+                context.startService(serviceIntent)
+            }
+
+            // و بعد ضبط رو شروع می‌کنیم
             val projection = projectionManager.getMediaProjection(
                 result.resultCode, result.data!!
             )
@@ -569,18 +577,11 @@ fun RemixLabApp(viewModel: PlayerViewModel = viewModel()) {
                         onClick = {
                             viewModel.clearRecordingError()
 
-                            val serviceIntent = Intent(context, MediaProjectionService::class.java)
-                            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                                context.startForegroundService(serviceIntent)
-                            } else {
-                                context.startService(serviceIntent)
-                            }
-
-                            Handler(Looper.getMainLooper()).postDelayed({
-                                projectionLauncher.launch(
-                                    projectionManager.createScreenCaptureIntent()
-                                )
-                            }, 1000)
+                            // 🎯 فقط دیالوگ اجازه ضبط رو نشون می‌دیم
+                            // سرویس بعد از اجازه کاربر شروع می‌شه
+                            projectionLauncher.launch(
+                                projectionManager.createScreenCaptureIntent()
+                            )
                         },
                         modifier = Modifier.fillMaxWidth(),
                         colors = ButtonDefaults.buttonColors(
