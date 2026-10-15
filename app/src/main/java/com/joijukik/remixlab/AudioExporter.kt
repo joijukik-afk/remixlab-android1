@@ -33,8 +33,9 @@ class AudioExporter(private val context: Context) {
     var onFinish: ((Uri) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
-    private val sampleRate = 48000
-    private val channelCount = 2
+    // ─── تنظیمات استودیویی ───
+    private val sampleRate = 48000          // 48 kHz
+    private val channelCount = 2            // Stereo
     private val audioFormat = AudioFormat.ENCODING_PCM_16BIT
 
     fun startRecording(
@@ -48,10 +49,11 @@ class AudioExporter(private val context: Context) {
                 .addMatchingUsage(AudioAttributes.USAGE_UNKNOWN)
                 .build()
 
+            // 🎯 بافر ۸ برابر برای حذف کامل خش و پرش صدا
             val minBufferSizeShorts = AudioRecord.getMinBufferSize(
                 sampleRate, AudioFormat.CHANNEL_IN_STEREO, audioFormat
             ) / 2
-            val bufferSizeShorts = (minBufferSizeShorts * 4).coerceAtLeast(sampleRate)
+            val bufferSizeShorts = (minBufferSizeShorts * 8).coerceAtLeast(sampleRate * 2)
 
             val record = AudioRecord.Builder()
                 .setAudioFormat(
@@ -95,12 +97,13 @@ class AudioExporter(private val context: Context) {
     private fun encodeAndWriteAudio(bufferSizeShorts: Int, bitRate: Int) {
         val file = outputFile ?: return
 
+        // پیکربندی LAME
         val builder = LameBuilder()
             .setInSampleRate(sampleRate)
             .setOutChannels(channelCount)
             .setOutBitrate(bitRate / 1024)  // kbps
             .setMode(LameBuilder.Mode.JSTEREO)
-            .setQuality(2)
+            .setQuality(0)                   // 🎯 بالاترین کیفیت (0 = بهترین)
             .setVbrMode(LameBuilder.VbrMode.VBR_OFF)
 
         androidLame = AndroidLame(builder)
@@ -119,11 +122,13 @@ class AudioExporter(private val context: Context) {
 
                     val samplesPerChannel = shortsRead / 2
 
+                    // تفکیک کانال چپ و راست
                     for (i in 0 until samplesPerChannel) {
                         leftChannel[i] = pcmBuffer[i * 2]
                         rightChannel[i] = pcmBuffer[i * 2 + 1]
                     }
 
+                    // انکود به MP3
                     val bytesEncoded = androidLame?.encode(
                         leftChannel,
                         rightChannel,
@@ -141,6 +146,7 @@ class AudioExporter(private val context: Context) {
             e.printStackTrace()
             onError?.invoke("خطا در انکود: ${e.message}")
         } finally {
+            // آزادسازی منابع
             androidLame?.close()
             androidLame = null
             try { audioRecord?.stop() } catch (_: Exception) {}
